@@ -446,6 +446,10 @@ config BATTERY_RT5033
 	  This adds support for battery fuel gauge in Richtek RT5033 PMIC.
 	  The fuelgauge calculates and determines the battery state of charge
 	  according to battery open circuit voltage.
+	  
+config ADV_VPM_COMM
+       tristate "Advantech VPM driver support"
+       depends on I2C	  
 
 source "drivers/power/reset/Kconfig"
 
