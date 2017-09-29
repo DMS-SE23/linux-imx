@@ -176,13 +176,11 @@
 	status = "okay";
 	
 	adv_vpm: adv_vpm@78 {
-               compatible = "adv_vpm";
-               reg = <0x78>;
-               interrupt-parent = <&gpio1>;
-               interrupts = <20 1>;
-       };
-
-
+		compatible = "adv_vpm";
+		reg = <0x78>;
+		interrupt-parent = <&gpio1>;
+		interrupts = <20 1>;
+	};
 };
 
 &i2c2 {
@@ -198,6 +196,7 @@
 		VDDA-supply = <&reg_3p3v>;
 		VDDIO-supply = <&reg_1p8v>;
 	};
+
 	egalax_i2c@2a {
 		compatible = "eeti,egalax_i2c";
 		reg = <0x2a>;
@@ -205,7 +204,6 @@
 		interrupts = <6 8>;
 		int-gpios = <&gpio4 6 0>;
 	};
-
 };
 
 &i2c3 {
@@ -213,13 +211,14 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c3>;
 	status = "okay";
+
 	rtc@32 {
-                compatible = "epson,rx8010";
-                reg = <0x32>;
-                interrupt-parent = <&gpio4>;
-                interrupts = <8>;
-                rx8010-irq_1 = <&gpio4 8 0>;
-        };
+		compatible = "epson,rx8010";
+		reg = <0x32>;
+		interrupt-parent = <&gpio4>;
+		interrupts = <8>;
+		rx8010-irq_1 = <&gpio4 8 0>;
+	};
 };
 
 &iomuxc {
@@ -244,8 +243,6 @@
 				MX6QDL_PAD_KEY_ROW4__GPIO4_IO15  0x80000000 // AMP_EN
 				MX6QDL_PAD_EIM_D22__GPIO3_IO22  0x80000000 // MUTE
 				MX6QDL_PAD_SD1_CLK__GPIO1_IO20  0x80000000 // VPM INT
-				
-				
 			>;
 		};
 
@@ -368,6 +365,7 @@
 				
 			>;
 		};
+		
 		pinctrl_wdog: wdoggrp {
 			fsl,pins = <
 				MX6QDL_PAD_GPIO_9__WDOG1_B 0x80000000
