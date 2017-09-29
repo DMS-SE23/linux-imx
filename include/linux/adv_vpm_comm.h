@@ -269,7 +269,7 @@ struct adv_vpm_platform_data {
 };
 #endif	//adv_vpm_comm_0630
 
-extern int adv_vpm_tf(struct adv_vpm_data *, int);
+extern int adv_vpm_tf(struct adv_vpm_data *);
 extern int adv_vpm_cmd_suspend(void);
 extern int adv_vpm_cmd_off_mode(void);
 extern int adv_vpm_cmd_os_resumeon_ping(void);

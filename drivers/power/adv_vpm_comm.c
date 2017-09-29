@@ -245,7 +245,7 @@ void vpm_power_off_event_handler_func(void)
 
 }
 
-int adv_i2c_tf(struct adv_vpm_data *tf_data, int ReadWrite)
+int adv_i2c_tf(struct adv_vpm_data *tf_data)
 {
     int err=0, ret=0;
 	struct i2c_msg xfer;
@@ -258,14 +258,14 @@ int adv_i2c_tf(struct adv_vpm_data *tf_data, int ReadWrite)
 
 	mutex_lock(&vpm_mutex);
 	
-	if(ReadWrite == I2C_Write)
+	if(tf_data->wlen > 0)
 	{
 		xfer.addr = client_vpm->addr;
 		xfer.flags = 0;
 		xfer.len = tf_data->wlen;
 		xfer.buf = tf_data->data;
 		
-		//printk("%d, tf_data[%d, %d]\n",xfer.len, tf_data->data[0], tf_data->data[1]);
+		//printk("vpm write %d, tf_data[%d, %d]\n",xfer.len, tf_data->data[0], tf_data->data[1]);
 		
 		if(i2c_transfer(client_vpm->adapter, &xfer, 1) != 1) 
 		{
@@ -278,8 +278,9 @@ int adv_i2c_tf(struct adv_vpm_data *tf_data, int ReadWrite)
 		}
 	}
 
-
-	else if(ReadWrite == I2C_Read) {
+	
+	if(tf_data->rlen > 0) {
+		msleep(10);
 		xfer.addr = client_vpm->addr;
 		xfer.flags = I2C_M_RD;
 		xfer.len = tf_data->rlen;
@@ -291,7 +292,7 @@ int adv_i2c_tf(struct adv_vpm_data *tf_data, int ReadWrite)
 			goto exit_tf;
 		}
 	
-		//printk("................VPM test = [%d,%d,%d,%d,%d]\n", xfer.buf[0], xfer.buf[1], xfer.buf[2], xfer.buf[3], xfer.buf[4]);
+		//printk("VPM read = [%d,%d,%d,%d,%d]\n", xfer.buf[0], xfer.buf[1], xfer.buf[2], xfer.buf[3], xfer.buf[4]);
 	
 		memcpy((void*)&tf_data->data,(void*)xfer.buf,tf_data->rlen);
 	}
@@ -302,13 +303,13 @@ exit_tf:
 	return err;
 }
 
-int adv_vpm_tf(struct adv_vpm_data *tf_data, int ReadWrite)
+int adv_vpm_tf(struct adv_vpm_data *tf_data)
 {
     if (bootloaderMode) {
         printk("The system is in the bootloader mode");
         return -1;
     }
-    return adv_i2c_tf(tf_data, ReadWrite);
+    return adv_i2c_tf(tf_data);
 }
 
 
@@ -341,13 +342,13 @@ int vpm_get_module_control(void)
 	tp.wlen = 1;
 	tp.rlen = 1;
 	tp.data[0] = 0x50;
-	adv_vpm_tf(&tp, I2C_Read);
+	adv_vpm_tf(&tp);
 	module_control_h=tp.data[0];
 
 	tp.wlen = 1;
 	tp.rlen = 1;
 	tp.data[0] = 0x51;
-	adv_vpm_tf(&tp, I2C_Read);
+	adv_vpm_tf(&tp);
 	module_control_l=tp.data[0];
 
 	return 0;
@@ -360,18 +361,13 @@ int vpm_get_version(void)
 	struct adv_vpm_data tp = {0};
 	int major_version;
 	int minor_version;
-
+	
 	tp.wlen = 2;
-	tp.rlen = 0;
+	tp.rlen = 3;
 	tp.data[0] = 0xF0;
 	tp.data[1] = 0xF0;
-	adv_vpm_tf(&tp, I2C_Write);
+	adv_vpm_tf(&tp);
 	
-	msleep(50);
-	tp.wlen = 0;
-	tp.rlen = 3;
-	adv_vpm_tf(&tp, I2C_Read);
-
 	printk("VPM Version: %d.%d\n", tp.data[0], tp.data[1]);
 	
 	ret = 0;
@@ -388,7 +384,7 @@ void vpm_set_interrupt_status(int status)
 	tp.data[0] = VPM_SET_INTERRUPT_STATUS;
 	tp.data[1] = status;
 	tp.data[2] = VPM_SET_INTERRUPT_STATUS ^ status;
-	adv_vpm_tf(&tp, I2C_Write);
+	adv_vpm_tf(&tp);
 
 }
 
@@ -397,15 +393,11 @@ int vpm_get_interrupt_status(void)
 	struct adv_vpm_data tp = {0};
 	
 	tp.wlen = 2;
-	tp.rlen = 0;
+	tp.rlen = 2;
 	tp.data[0] = VPM_GET_INTERRUPT_STATUS;
 	tp.data[1] = VPM_GET_INTERRUPT_STATUS;
-	adv_vpm_tf(&tp, I2C_Write);
+	adv_vpm_tf(&tp);
 	
-	tp.wlen = 0;
-	tp.rlen = 2;
-
-	adv_vpm_tf(&tp, I2C_Read);
 	
 	printk("VPM Interrupt Status: %d\n", tp.data[0]);
 	
@@ -420,16 +412,11 @@ int vpm_get_mode(void){
 	struct adv_vpm_data tp = {0};
 
 	tp.wlen = 2;
-	tp.rlen = 0;
+	tp.rlen = 2;
 	tp.data[0] = 0xFE;
 	tp.data[1] = 0xFE;
-	adv_vpm_tf(&tp, I2C_Write);
+	adv_vpm_tf(&tp);
 	
-	msleep(50);
-	tp.wlen = 0;
-	tp.rlen = 2;
-
-	adv_vpm_tf(&tp, I2C_Read);
 	
 	printk("vpm_get_mode: %d\n", tp.data[0]);
 	
@@ -474,7 +461,7 @@ int vpm_set_wwan_on_off(int on_off)
 		tp.data[1] = 0x00;
 	}
 
-	adv_vpm_tf(&tp, I2C_Read);
+	adv_vpm_tf(&tp);
 
 	ret = 0;
 
@@ -490,7 +477,7 @@ int vpm_get_wwan_on_off(void)
 	tp.rlen = 1;
 	tp.data[0] = 0x50;
 
-	adv_vpm_tf(&tp, I2C_Read);
+	adv_vpm_tf(&tp);
 
 	dbg("VPM WWAN status = [%d]  \n", tp.data[0]);
 
@@ -521,7 +508,7 @@ int vpm_get_wifi_mac_addr(unsigned char *pdata)
 		vd.rlen = 1;
 		vd.data[0] = VPM_WLAN_MAC_ADDR_BYTE_1 + i;
 
-		adv_vpm_tf(&vd, I2C_Read);
+		adv_vpm_tf(&vd);
 
 		wifi_mac[i] = vd.data[0];
 	}
@@ -541,7 +528,7 @@ int adv_vpm_readkey(void)
 	tp.wlen = 1;
 	tp.rlen = 1;
 	tp.data[0] = VPM_INT_INDEX;
-	adv_vpm_tf(&tp, I2C_Read);
+	adv_vpm_tf(&tp);
 	result_key = tp.data[0];
 
 	return result_key;
@@ -554,16 +541,12 @@ static int adv_vpm_read_event(void)
 	struct adv_vpm_data tp = {0};	
 	
 	tp.wlen = 2;
-	tp.rlen = 0;
+	tp.rlen = 3;
 	tp.data[0] = VPM_GET_INTERRUPT_EVENT;
 	tp.data[1] = VPM_GET_INTERRUPT_EVENT;
-	adv_vpm_tf(&tp, I2C_Write);
+	adv_vpm_tf(&tp);
 	
-	msleep(50);
-	tp.wlen = 0;
-	tp.rlen = 3;
 
-	adv_vpm_tf(&tp, I2C_Read);
 	
 	shift_high = tp.data[0];
 	event_interrupt = (shift_high << 8) + tp.data[1];
@@ -757,9 +740,9 @@ static long vpm_ioctl_ioctl(struct file *filp, unsigned int cmd, unsigned long a
         }
 	if (tp.data[0] == 0x0b && tp.data[1] == 0x05) {
             bootloaderMode =1;
-            retval = adv_i2c_tf(&tp, I2C_Write);
+            retval = adv_i2c_tf(&tp);
 	}else{
-            retval = adv_vpm_tf(&tp, I2C_Write);
+            retval = adv_vpm_tf(&tp);
         }
         break;
     case IOCTL_VALGET:
@@ -767,7 +750,14 @@ static long vpm_ioctl_ioctl(struct file *filp, unsigned int cmd, unsigned long a
             retval = -EFAULT;
             goto done;
         }
-        retval = adv_vpm_tf(&tp, I2C_Read);
+
+		if (tp.data[0] == 0x0b && tp.data[1] == 0x05) {
+            bootloaderMode =1;
+            retval = adv_i2c_tf(&tp);
+		}else{
+            retval = adv_vpm_tf(&tp);
+        }
+		
         if (copy_to_user((int __user *)arg, &tp, sizeof(tp)) ) {
             retval = -EFAULT;
             goto done;
@@ -779,7 +769,7 @@ static long vpm_ioctl_ioctl(struct file *filp, unsigned int cmd, unsigned long a
             goto done;
         }
         bootloaderMode = 1;
-        retval = adv_i2c_tf(&tp, I2C_Write);
+        retval = adv_i2c_tf(&tp);
         break;
     case IOCTL_FW_VALGET:
         if (copy_from_user(&tp, (int __user *)arg, sizeof(tp))) {
@@ -787,7 +777,7 @@ static long vpm_ioctl_ioctl(struct file *filp, unsigned int cmd, unsigned long a
             goto done;
         }
         bootloaderMode = 1;
-        retval = adv_i2c_tf(&tp, I2C_Read);
+        retval = adv_i2c_tf(&tp);
         if (copy_to_user((int __user *)arg, &tp, sizeof(tp)) ) {
             retval = -EFAULT;
             goto done;
@@ -1114,7 +1104,7 @@ int adv_vpm_cmd_exe_suspend(void){//ask vpm to execute suspend from android ui
 	tp.data[1] = 0x02;
 
 	printk("adv_vpm_cmd_exe_suspend: cmd %d, %d \n",tp.data[0],tp.data[1]);
-	adv_vpm_tf(&tp, I2C_Read);
+	adv_vpm_tf(&tp);
 	return 0;;
 }
 //EXPORT_SYMBOL(adv_vpm_cmd_suspend);
@@ -1127,7 +1117,7 @@ int adv_vpm_cmd_off_mode(void){//ask vpm to change mode to off mode
 	tp.data[1] = 0x01;
 
 	printk("adv_vpm_cmd_off_mode: cmd %d, %d \n",tp.data[0],tp.data[1]);
-	adv_vpm_tf(&tp, I2C_Read);
+	adv_vpm_tf(&tp);
 	return 0;;
 }
 
@@ -1139,7 +1129,7 @@ int adv_vpm_cmd_os_resumeon_ping(void){// OS resume/on successful
 	tp.data[1] = 0x01;
 
 	printk("adv_vpm_cmd_os_resumeon_ping: cmd %d, %d \n",tp.data[0],tp.data[1]);
-	adv_vpm_tf(&tp, I2C_Read);
+	adv_vpm_tf(&tp);
 	return 0;;
 }
 
