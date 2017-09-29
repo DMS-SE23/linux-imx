@@ -777,7 +777,7 @@ static int tsl2563_probe(struct i2c_client *client,
 		err = devm_request_threaded_irq(&client->dev, client->irq,
 					   NULL,
 					   &tsl2563_event_handler,
-					   IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+					   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 					   "tsl2563_event",
 					   indio_dev);
 		if (err) {
