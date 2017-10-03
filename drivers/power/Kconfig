@@ -36,6 +36,10 @@ config GENERIC_ADC_BATTERY
 	  Say Y here to enable support for the generic battery driver
 	  which uses IIO framework to read adc.
 
+config BATTERY_BATTERY_VPM
+        tristate "BATTERY VPM battery driver"
+        help
+          Say Y here to enable support for batteries with BATTERY VPM chips.
 config MAX8925_POWER
 	tristate "MAX8925 battery charger support"
 	depends on MFD_MAX8925

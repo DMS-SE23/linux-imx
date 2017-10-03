@@ -1,4 +1,5 @@
 subdir-ccflags-$(CONFIG_POWER_SUPPLY_DEBUG) := -DDEBUG
+obj-$(CONFIG_ADV_VPM_COMM)      += adv_vpm_comm.o
 
 power_supply-y				:= power_supply_core.o
 power_supply-$(CONFIG_SYSFS)		+= power_supply_sysfs.o
@@ -65,5 +66,5 @@ obj-$(CONFIG_CHARGER_SMB347)	+= smb347-charger.o
 obj-$(CONFIG_CHARGER_TPS65090)	+= tps65090-charger.o
 obj-$(CONFIG_POWER_RESET)	+= reset/
 obj-$(CONFIG_AXP288_FUEL_GAUGE) += axp288_fuel_gauge.o
-obj-$(CONFIG_ADV_VPM_COMM)      += adv_vpm_comm.o
+obj-$(CONFIG_BATTERY_BATTERY_VPM)	+= battery_vpm_battery.o 
 

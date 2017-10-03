@@ -28,8 +28,6 @@ static DEFINE_MUTEX(vpm_pack_mutex);
 /*
  * VPM command address
  */
-#if VPM_PLATFROM_DMSST05
-//--- [ dms-st05 ] ---------------------------------
 #define VPM_INT_EVENT															0x00
 #define VPM_INT_INDEX															0x01
 #define VPM_SYS_INFO_H															0x02
@@ -116,7 +114,8 @@ static DEFINE_MUTEX(vpm_pack_mutex);
 #define VPM_24V_SYSTEM_POST_BOOT_VOLTAGE_VALUE_L								0x75    //adv_vpm_comm_0626
 #define VPM_CAR_POWER_VOLTAGE_LOW_PROTECTION_LOAD_D4							0x76    //adv_vpm_comm_0626
 
-#define VPM_BATTERY_PACK_STATE_OF_CHARGE										0x81	//adv_vpm_comm_0626
+
+#define VPM_BATTERY_PACK_STATE_OF_CHARGE										0x9F 
 #define VPM_BATTERY_PACK_TIME_TO_EMPTY_H										0x82
 #define VPM_BATTERY_PACK_TIME_TO_EMPTY_L										0x83
 #define VPM_BATTERY_PACK_TIME_TO_FULL_H											0x84
@@ -187,10 +186,9 @@ static DEFINE_MUTEX(vpm_pack_mutex);
 //#define VPM_PCB_VERSION														0xF4	//adv_vpm_comm_0626
 //#define VPM_OS_KERNEL_VERSION													0xF5    //adv_vpm_comm_0626
 #define VPM_GET_FIRMWARE_CHECKSUM_VERIFY_METHOD									0xF8	//adv_vpm_comm_0626
-#endif	//VPM_PLATFROM_DMSST05
 
-#if VPM_KEYPAD_EVENT_SUPPORTED	//adv_vpm_comm_0630
-//billy1023
+
+#if VPM_KEYPAD_EVENT_SUPPORTED	
 #define HOTKEY_BUTTON_UP 								0x00
 #define HOTKEY_HOME										0x10
 #define HOTKEY_KEY_MENU									0x01
@@ -205,7 +203,7 @@ static DEFINE_MUTEX(vpm_pack_mutex);
 #define HOTKEY_SW6										0x20
 #define HOTKEY_SW7										0x40
 #define HOTKEY_SW8										0x80
-#endif	//adv_vpm_comm_0630
+#endif	
 
 
 #define POWER_IGNITION_OFF 								0x01
@@ -213,11 +211,13 @@ static DEFINE_MUTEX(vpm_pack_mutex);
 #define POWER_BATTERY_LOW									0x04
 #define POWER_SHUTDOWN_FLAG_ENABLE						0x08
 
+//VPM_BATTERY_PACK_STATE_OF_CHARGE (0x9F)
+#define BATT_DISATTACHED 								0x00
+#define BATT_CHARGING 									0x01
+#define BATT_FULL_CHARGED 								0x02
+#define BATT_DC_OUT 									0x03
 
 
-
-//aaronlin: VPM_SYSTEM_POWER_STATUS 0x09
-#define BAT_EXIST_BIT 0x10
 
 #define VPM_I2C_INTERRUPT_DISABLE 0x00
 #define VPM_I2C_INTERRUPT_ENABLE  0x01
@@ -294,3 +294,41 @@ extern int adv_vpm_read_poweroff_source(void);
 extern int vpm_get_version(void);
 extern int vpm_is_bootloader_mode(void);
 #endif
+
+struct battery_vpm_pinfo {
+	/*
+	 * GPIOs
+	 * cen, chg, flt, and usus are optional.
+	 * dok, dcm, and uok are not optional depending on the status of
+	 * dc_valid and usb_valid.
+	 */
+	int cen;	/* Charger Enable input */
+	int dok;	/* DC(Adapter) Power OK output */
+	int uok;	/* USB Power OK output */
+	int chg;	/* Charger status output */
+	int flt;	/* Fault output */
+	int dcm;	/* Current-Limit Mode input (1: DC, 2: USB) */
+	int usus;	/* USB Suspend Input (1: suspended) */
+	int feature_flag;/* battery capacity feature(0:enable, 1:disable) */
+
+	/*
+	 * DCM wired to Logic High Set this true when DCM pin connect to
+	 * Logic high.
+	 */
+	bool dcm_always_high;
+
+	/*
+	 * DC(Adapter/TA) is wired
+	 * When dc_valid is true,
+	 *	dok and dcm should be valid.
+	 *
+	 * At least one of dc_valid or usb_valid should be true.
+	 */
+	bool dc_valid;
+	/*
+	 * USB is wired
+	 * When usb_valid is true,
+	 *	uok should be valid.
+	 */
+	bool usb_valid;
+};

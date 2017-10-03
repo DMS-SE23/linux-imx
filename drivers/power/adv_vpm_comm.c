@@ -265,7 +265,7 @@ int adv_i2c_tf(struct adv_vpm_data *tf_data)
 		xfer.len = tf_data->wlen;
 		xfer.buf = tf_data->data;
 		
-		//printk("vpm write %d, tf_data[%d, %d]\n",xfer.len, tf_data->data[0], tf_data->data[1]);
+		//printk("vpm write =[%d, %d]\n", tf_data->data[0], tf_data->data[1]);
 		
 		if(i2c_transfer(client_vpm->adapter, &xfer, 1) != 1) 
 		{
@@ -418,7 +418,7 @@ int vpm_get_mode(void){
 	adv_vpm_tf(&tp);
 	
 	
-	printk("vpm_get_mode: %d\n", tp.data[0]);
+	printk("vpm_get_download_mode: %d\n", tp.data[0]);
 	
 	return tp.data[0];
 	
