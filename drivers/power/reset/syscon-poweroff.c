@@ -22,6 +22,7 @@
 #include <linux/mfd/syscon.h>
 #include <linux/of_address.h>
 #include <linux/of_device.h>
+#include <linux/of_gpio.h>
 #include <linux/platform_device.h>
 #include <linux/pm.h>
 #include <linux/regmap.h>
@@ -30,12 +31,17 @@ static struct regmap *map;
 static u32 offset;
 static u32 mask;
 
+int poweroff_gpio;
+
 void syscon_poweroff(void)
 {
 	/* Issue the poweroff */
 	regmap_write(map, offset, mask);
 
-	mdelay(1000);
+	if (gpio_is_valid(poweroff_gpio))
+		gpio_set_value(poweroff_gpio, 0);
+
+	mdelay(5000);
 
 	pr_emerg("Unable to poweroff system\n");
 }
@@ -43,6 +49,7 @@ void syscon_poweroff(void)
 static int syscon_poweroff_probe(struct platform_device *pdev)
 {
 	char symname[KSYM_NAME_LEN];
+	int errno;
 
 	map = syscon_regmap_lookup_by_phandle(pdev->dev.of_node, "regmap");
 	if (IS_ERR(map)) {
@@ -58,6 +65,18 @@ static int syscon_poweroff_probe(struct platform_device *pdev)
 	if (of_property_read_u32(pdev->dev.of_node, "mask", &mask)) {
 		dev_err(&pdev->dev, "unable to read 'mask'");
 		return -EINVAL;
+	}
+
+	poweroff_gpio = of_get_named_gpio(pdev->dev.of_node, "poweroff-gpio", 0);
+	
+	if (gpio_is_valid(poweroff_gpio)) {
+		errno = devm_gpio_request_one(&pdev->dev, poweroff_gpio,
+				    GPIOF_OUT_INIT_HIGH, "poweroff-gpio");
+		if (errno) {
+			dev_err(&pdev->dev, "failed to get poweroff gpio: %d\n", errno);
+		}
+
+		pr_info("power off system by gpio %d\n", poweroff_gpio);
 	}
 
 	if (pm_power_off) {
