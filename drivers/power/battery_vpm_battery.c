@@ -277,17 +277,27 @@ static int vpm_charger_get_property(struct power_supply *psy,
 		union power_supply_propval *val)
 {
 	struct battery_vpm_info *data = psy->drv_data;
+	int ret, state;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ONLINE:
+
+		// Use Battery Pack State (0x9F) command to check AC online property
+		//   0x00 - Battery disattached. (DC mode)
+		//   0x01 - Battery not fully charged
+		//   0x02 - Battery fully charged
+		//   0x03 - DC out, and Battery attached. (Battery mode)
 		
-		// Wait for VPM DC in/outcommand
-		//ret = battery_vpmread(battery_vpm_data[reg_offset].addr);
-		//printk(KERN_INFO "battery_vpm: [%d]  0x%2X = 0x%4X\n", psp,battery_vpm_data[reg_offset].addr,ret);
-		//if (ret == ) // DC in
+		ret = battery_vpmread(VPM_BATTERY_PACK_STATE_OF_CHARGE);
+
+		state = ret & 0x0F;
+		
+		if (state == 0x03)  //Battery mode
+			val->intval = 0;
+		else
 			val->intval = 1;
-		//else
-		//	val->intval = 0;
+
+		printk(KERN_DEBUG "%s, state = %x, online = %d\n", __func__, state, val->intval);
 		
 		break;
 	default:
