@@ -19,6 +19,7 @@
 /* input */
 #include <linux/input.h>
 #include <linux/gpio.h>
+#include <linux/of_gpio.h>
 
 #define ADV_VPM_DEBUG 1
 
@@ -88,6 +89,7 @@ unsigned char module_control_h;
 unsigned char module_control_l;
 unsigned char bootloaderMode = 0;
 unsigned char check_mode_status = 0;
+u32 irq_gpio;
 
 //array of vpm event handler function pointers
 eventhandler vpm_event_handler_array[VPM_EVENT_TOTAL]= {0};
@@ -564,9 +566,9 @@ static void adv_vpm_event_work(struct work_struct *work)
 {
 	int event_interrupt = 0, event_id = 0;
 
-	while(gpio_get_value(205))
+	while(gpio_get_value(irq_gpio))
 		{
-		//printk("gpio_205=%d",gpio_get_value(205));
+		//printk("vpm irq gpio%d = %d",irq_gpio, gpio_get_value(irq_gpio));
 		event_data = 0, event_interrupt = 0, event_id = 0;
 			
 		mutex_lock(&vpm_pack_mutex);		
@@ -635,8 +637,8 @@ static void adv_vpm_event_work(struct work_struct *work)
 		}
 
 		mutex_unlock(&vpm_pack_mutex);
-		
-		//msleep(20);
+
+		msleep(20);
 		}
 }
 
@@ -835,9 +837,8 @@ static int adv_vpm_probe(struct i2c_client *client, const struct i2c_device_id *
     int j = 0;	
     bool is_empty = true;	
 
-#if VPM_DOCKING_SUPPORTED	
-	const struct adv_vpm_platform_data *pdata = client->dev.platform_data;
-#endif	
+	struct device_node *devnode = client->dev.of_node;;
+
 	
 	int i, err = -1;
 
@@ -854,9 +855,18 @@ static int adv_vpm_probe(struct i2c_client *client, const struct i2c_device_id *
 	i2c_set_clientdata(client, &data);
 
 #if VPM_KEYPAD_EVENT_SUPPORTED	
-      char tmpbuf[64] = {0};
-      char tmpbuf_get[64] = {0};
-      char tmpbuf_set[10] = {0};	
+
+	
+	if(devnode)
+	{
+		irq_gpio = of_get_named_gpio(devnode, "int-gpios", 0);
+		printk(KERN_INFO "vpm int gpio = %d", irq_gpio);
+	}
+	
+	
+    char tmpbuf[64] = {0};
+    char tmpbuf_get[64] = {0};
+    char tmpbuf_set[10] = {0};	
 	int shift = 0, test = 0;  
    
 
