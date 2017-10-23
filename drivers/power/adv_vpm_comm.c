@@ -16,6 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/cdev.h> 
 #include <linux/uaccess.h> 
+#include <linux/reboot.h>
 /* input */
 #include <linux/input.h>
 #include <linux/gpio.h>
@@ -53,7 +54,7 @@
 #define LINUX_Key4							108
 #define LINUX_Key5				   			103
 
-#define ADV_POWER_OFF_KEYCODE				70
+#define ADV_POWER_OFF_KEYCODE				KEY_POWER
 
 char event_data;
 
@@ -536,6 +537,18 @@ int adv_vpm_readkey(void)
 	return result_key;
 }
 #endif	
+
+static int adv_vpm_write_power_off(void)
+{
+    int ret = -1;
+	struct adv_vpm_data tp = {0};
+	tp.wlen = 2;
+	tp.rlen = 1;
+	tp.data[0] = 0x39;
+	tp.data[1] = 0x39;
+	adv_vpm_tf(&tp);
+    return tp.data[0];
+}
 
 static int adv_vpm_read_event(void)
 {
@@ -1178,13 +1191,38 @@ static struct i2c_driver adv_vpm_driver = {
 //#endif	//VPM_PLATFROM_DMSST05
 };
 
+static int battery_vpm_notify_shutdown(struct notifier_block *this,  
+       unsigned long code, void *x)  
+{  
+//printk("battery_vpm_notify_shutdown: %d\n", code); 
+    if ((code == SYS_POWER_OFF))
+ 	{  
+        adv_vpm_write_power_off();
+    }
+    return NOTIFY_DONE;  
+}  
+
+static struct notifier_block battery_vpm_notifier = {
+    .notifier_call  = battery_vpm_notify_shutdown,
+    .next       = NULL,
+    .priority   = INT_MAX, /* should be > ssd pri's and disk dev pri's */
+};
+
 static int __init adv_vpm_init(void)
 {
-	return i2c_add_driver(&adv_vpm_driver);
+    int err;
+    if (err = register_reboot_notifier(&battery_vpm_notifier))
+		goto exit_free_vpm_battery_nofifier;
+    return i2c_add_driver(&adv_vpm_driver);
+
+exit_free_vpm_battery_nofifier:
+	unregister_reboot_notifier(&battery_vpm_notifier);
+	return err;
 }
 
 static void __exit adv_vpm_exit(void)
 {
+    unregister_reboot_notifier(&battery_vpm_notifier);
 	i2c_del_driver(&adv_vpm_driver);
 }
 
