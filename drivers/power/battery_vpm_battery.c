@@ -168,6 +168,36 @@ static int battery_vpm_get_present(union power_supply_propval *val)
 	return 0;
 }
 
+static void  battery_vpm_unit_adjustment(
+	enum power_supply_property psp, union power_supply_propval *val)
+{
+#define BASE_UNIT_CONVERSION		1000
+#define BATTERY_MODE_CAP_MULT_WATT	(10 * BASE_UNIT_CONVERSION)
+#define TIME_UNIT_CONVERSION		600
+#define TEMP_KELVIN_TO_CELCIUS		2731
+	switch (psp) {
+
+//	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+//	case POWER_SUPPLY_PROP_CURRENT_NOW:
+//		val->intval *= BASE_UNIT_CONVERSION;
+//		break;
+	case POWER_SUPPLY_PROP_TEMP:
+		/* battery_vpm provides battery tempreture in 0.1K
+		 * so convert it to 0.1C */
+		val->intval -= TEMP_KELVIN_TO_CELCIUS;
+		break;
+
+//	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
+//	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
+//		val->intval *= TIME_UNIT_CONVERSION;
+//		break;
+
+	default:
+		//printk(KERN_DEBUG "%s: no need for unit conversion %d\n", __func__, psp);
+		break;
+	}
+}
+
 static int battery_vpm_get_battery_property(
 	int reg_offset, enum power_supply_property psp,
 	union power_supply_propval *val)
@@ -187,6 +217,9 @@ static int battery_vpm_get_battery_property(
 	if (ret >= battery_vpm_data[reg_offset].min_value &&
 	    ret <= battery_vpm_data[reg_offset].max_value) {
 		val->intval = ret;
+
+		battery_vpm_unit_adjustment(psp, val);
+		
 		if (psp == POWER_SUPPLY_PROP_STATUS) {
 			ret = ret >> 8;
 			if (ret == BATT_CHARGING) // 0x01
@@ -204,37 +237,6 @@ static int battery_vpm_get_battery_property(
 	}
 
 	return 0;
-}
-
-static void  battery_vpm_unit_adjustment(
-	enum power_supply_property psp, union power_supply_propval *val)
-{
-#define BASE_UNIT_CONVERSION		1000
-#define BATTERY_MODE_CAP_MULT_WATT	(10 * BASE_UNIT_CONVERSION)
-#define TIME_UNIT_CONVERSION		600
-#define TEMP_KELVIN_TO_CELCIUS		2731
-	switch (psp) {
-
-	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		val->intval *= BASE_UNIT_CONVERSION;
-		break;
-
-	case POWER_SUPPLY_PROP_TEMP:
-		/* battery_vpm provides battery tempreture in 0.1K
-		 * so convert it to 0.1C */
-		val->intval -= TEMP_KELVIN_TO_CELCIUS;
-		break;
-
-	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
-	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
-		val->intval *= TIME_UNIT_CONVERSION;
-		break;
-
-	default:
-		//printk(KERN_DEBUG "%s: no need for unit conversion %d\n", __func__, psp);
-		break;
-	}
 }
 
 
