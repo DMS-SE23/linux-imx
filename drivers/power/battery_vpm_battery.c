@@ -42,7 +42,7 @@ enum {
 	VPM_FLAGS,
 	VPM_TEMPERATURE,
 	VPM_VOLTAGE,
-	VPM_CURRENT_AVG,
+	VPM_CURRENT,
 };
 
 #define POLL_INTERVAL			30
@@ -75,8 +75,8 @@ static const struct battery_vpm_device_data {
 	[VPM_TIME_TO_FULL] =			BATTERY_VPM_DATA(POWER_SUPPLY_PROP_TIME_TO_FULL_AVG, 0x96, 0, 65535), //min.
 	[VPM_FLAGS] =					BATTERY_VPM_DATA(POWER_SUPPLY_PROP_STATUS, 0x9F, 0, 65535), 
 	[VPM_TEMPERATURE] =				BATTERY_VPM_DATA(POWER_SUPPLY_PROP_TEMP, 0x93, 0, 65535), //0.1K C=K-237.15
-	[VPM_VOLTAGE] =					BATTERY_VPM_DATA(POWER_SUPPLY_PROP_VOLTAGE_NOW, 0x94, 0, 20000), //mV, ***range is not sure
-	[VPM_CURRENT_AVG] = 			BATTERY_VPM_DATA(POWER_SUPPLY_PROP_CURRENT_AVG, 0x95, -32768, 32767), //mA, ***range is not sure
+	[VPM_VOLTAGE] =					BATTERY_VPM_DATA(POWER_SUPPLY_PROP_VOLTAGE_NOW, 0x94, 0, 65535), //mV
+	[VPM_CURRENT] = 			    BATTERY_VPM_DATA(POWER_SUPPLY_PROP_CURRENT_NOW, 0x95, -32768, 32767),//mA
 };
 
 static enum power_supply_property vpm_charger_properties[] = {
@@ -90,7 +90,9 @@ static enum power_supply_property battery_vpm_properties[] = {
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG,
 	POWER_SUPPLY_PROP_TIME_TO_FULL_AVG,
-	//POWER_SUPPLY_PROP_SERIAL_NUMBER,
+	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
 };
 
 
@@ -248,7 +250,7 @@ static int battery_vpm_get_battery_capacity(
 	ret = ret && 0x00FF;
 	
 	if (ret == BATT_DISATTACHED) {
-		printk("vpm: battery plug out, set capacity to ZERO\n");
+		//printk("vpm: battery plug out, set capacity to ZERO\n");
 		val->intval = 0;
 		return 0;
 	}
@@ -297,7 +299,7 @@ static int vpm_charger_get_property(struct power_supply *psy,
 		else
 			val->intval = 1;
 
-		printk(KERN_DEBUG "%s, state = %x, online = %d\n", __func__, state, val->intval);
+		//printk(KERN_DEBUG "%s, state = %x, online = %d\n", __func__, state, val->intval);
 		
 		break;
 	default:
@@ -378,7 +380,7 @@ static int battery_vpm_probe(struct platform_device *pdev)
 	struct power_supply_config psy_cfg = {};
 	int rc;
 
-	printk("aaronlin: %s \n", __func__);
+	printk("%s \n", __func__);
 
 	
 	data = devm_kzalloc(dev, sizeof(struct battery_vpm_info), GFP_KERNEL);
