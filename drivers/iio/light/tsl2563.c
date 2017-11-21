@@ -40,6 +40,19 @@
 #include <linux/iio/events.h>
 #include <linux/platform_data/tsl2563.h>
 
+#include <linux/syscalls.h>
+#include <linux/fs.h>
+#include <linux/file.h>
+#include <linux/string.h>
+
+#define CONFIG_SENSORS_ADV_AUTOBL    1
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+#include <linux/adv_autobl.h>
+#define DEFAULT_THRES_RANGE  50
+#define DEFAULT_LUX200_CAL  200
+#define DEFAULT_CONTROL_BL    1
+#endif
+
 /* Use this many bits for fraction part. */
 #define ADC_FRAC_BITS		14
 
@@ -92,6 +105,62 @@ struct tsl2563_gainlevel_coeff {
 	u16 max;
 };
 
+struct tsl2563_info {
+	u8   addr;
+	char *name;
+};
+
+static const struct tsl2563_info tsl2563_info_table[] = {
+	{
+		.addr = TSL2563_REG_CTRL,
+		.name = "CONTROL",
+	},
+	{
+		.addr = TSL2563_REG_TIMING,
+		.name = "TIMING",
+	},
+	{
+		.addr = TSL2563_REG_LOWLOW,
+		.name = "THRESHLOWLOW",
+	},
+	{
+		.addr = TSL2563_REG_LOWHIGH,
+		.name = "THRESHLOWHIGH",
+	},
+	{
+		.addr = TSL2563_REG_HIGHLOW,
+		.name = "THRESHHIGHLOW",
+	},
+	{
+		.addr = TSL2563_REG_HIGHHIGH,
+		.name = "THRESHHIGHHIGH",
+	},
+	{
+		.addr = TSL2563_REG_INT,
+		.name = "INTERRUPT",
+	},
+	{
+		.addr = TSL2563_REG_ID,
+		.name = "ID",
+	},
+	{
+		.addr = TSL2563_REG_DATA0LOW,
+		.name = "DATA0LOW",
+	},
+	{
+		.addr = TSL2563_REG_DATA0HIGH,
+		.name = "DATA0HIGH",
+	},
+	{
+		.addr = TSL2563_REG_DATA1LOW,
+		.name = "DATA1LOW",
+	},
+	{
+		.addr = TSL2563_REG_DATA1HIGH,
+		.name = "DATA1HIGH",
+	},
+};
+
 static const struct tsl2563_gainlevel_coeff tsl2563_gainlevel_table[] = {
 	{
 		.gaintime	= TSL2563_TIMING_400MS | TSL2563_TIMING_GAIN16,
@@ -116,7 +185,7 @@ struct tsl2563_chip {
 	struct mutex		lock;
 	struct i2c_client	*client;
 	struct delayed_work	poweroff_work;
-
+	struct delayed_work	int_enable_work;
 	/* Remember state for suspend and resume functions */
 	bool suspended;
 
@@ -124,8 +193,14 @@ struct tsl2563_chip {
 
 	u16			low_thres;
 	u16			high_thres;
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+	int			threshold_range;
+	int			lux200_calibration;
+	int			lux;
+	int         control_bl;
+#endif
 	u8			intr;
-	bool			int_enabled;
+	bool		int_enabled;
 
 	/* Calibration coefficients */
 	u32			calib0;
@@ -303,85 +378,23 @@ static int tsl2563_adjust_gainlevel(struct tsl2563_chip *chip, u16 adc)
 					  chip->gainlevel->gaintime);
 
 		tsl2563_wait_adc(chip);
-		tsl2563_wait_adc(chip);
+		//tsl2563_wait_adc(chip);
 
 		return 1;
 	} else
 		return 0;
 }
 
-static int tsl2563_get_adc(struct tsl2563_chip *chip)
+/* Apply calibration coefficient to ADC count. */
+static u32 calib_adc(u32 adc, u32 calib)
 {
-	struct i2c_client *client = chip->client;
-	u16 adc0, adc1;
-	int retry = 1;
-	int ret = 0;
+	unsigned long scaled = adc;
 
-	if (chip->suspended)
-		goto out;
+	scaled *= calib;
+	scaled >>= CALIB_FRAC_BITS;
 
-	if (!chip->int_enabled) {
-		cancel_delayed_work(&chip->poweroff_work);
-
-		if (!tsl2563_get_power(chip)) {
-			ret = tsl2563_set_power(chip, 1);
-			if (ret)
-				goto out;
-			ret = tsl2563_configure(chip);
-			if (ret)
-				goto out;
-			tsl2563_wait_adc(chip);
-		}
-	}
-
-	while (retry) {
-		ret = i2c_smbus_read_word_data(client,
-				TSL2563_CMD | TSL2563_REG_DATA0LOW);
-		if (ret < 0)
-			goto out;
-		adc0 = ret;
-
-		ret = i2c_smbus_read_word_data(client,
-				TSL2563_CMD | TSL2563_REG_DATA1LOW);
-		if (ret < 0)
-			goto out;
-		adc1 = ret;
-
-		retry = tsl2563_adjust_gainlevel(chip, adc0);
-	}
-
-	chip->data0 = normalize_adc(adc0, chip->gainlevel->gaintime);
-	chip->data1 = normalize_adc(adc1, chip->gainlevel->gaintime);
-
-	if (!chip->int_enabled)
-		schedule_delayed_work(&chip->poweroff_work, 5 * HZ);
-
-	ret = 0;
-out:
-	return ret;
+	return (u32) scaled;
 }
-
-static inline int calib_to_sysfs(u32 calib)
-{
-	return (int) (((calib * CALIB_BASE_SYSFS) +
-		       CALIB_FRAC_HALF) >> CALIB_FRAC_BITS);
-}
-
-static inline u32 calib_from_sysfs(int value)
-{
-	return (((u32) value) << CALIB_FRAC_BITS) / CALIB_BASE_SYSFS;
-}
-
-/*
- * Conversions between lux and ADC values.
- *
- * The basic formula is lux = c0 * adc0 - c1 * adc1, where c0 and c1 are
- * appropriate constants. Different constants are needed for different
- * kinds of light, determined by the ratio adc1/adc0 (basically the ratio
- * of the intensities in infrared and visible wavelengths). lux_table below
- * lists the upper threshold of the adc1/adc0 ratio and the corresponding
- * constants.
- */
 
 struct tsl2563_lux_coeff {
 	unsigned long ch_ratio;
@@ -441,16 +454,122 @@ static unsigned int adc_to_lux(u32 adc0, u32 adc1)
 	return (unsigned int) (lux >> ADC_FRAC_BITS);
 }
 
-/* Apply calibration coefficient to ADC count. */
-static u32 calib_adc(u32 adc, u32 calib)
+static int tsl2563_get_adc(struct tsl2563_chip *chip)
 {
-	unsigned long scaled = adc;
+	struct i2c_client *client = chip->client;
+	u16 adc0, adc1;
+	int retry = 1;
+	int ret = 0;
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+	int max_range,calib0,calib1;
+#endif
+	if (chip->suspended)
+		goto out;
 
-	scaled *= calib;
-	scaled >>= CALIB_FRAC_BITS;
+	if (!chip->int_enabled) {
+		cancel_delayed_work(&chip->poweroff_work);
 
-	return (u32) scaled;
+		if (!tsl2563_get_power(chip)) {
+			ret = tsl2563_set_power(chip, 1);
+			if (ret)
+				goto out;
+			ret = tsl2563_configure(chip);
+			if (ret)
+				goto out;
+			tsl2563_wait_adc(chip);
+		}
+	}
+
+	while (retry) {
+		ret = i2c_smbus_read_word_data(client,
+				TSL2563_CMD | TSL2563_REG_DATA0LOW);
+		if (ret < 0)
+			goto out;
+		adc0 = ret;
+
+		ret = i2c_smbus_read_word_data(client,
+				TSL2563_CMD | TSL2563_REG_DATA1LOW);
+		if (ret < 0)
+			goto out;
+		adc1 = ret;
+
+		retry = tsl2563_adjust_gainlevel(chip, adc0);
+	}
+
+	chip->data0 = normalize_adc(adc0, chip->gainlevel->gaintime);
+	chip->data1 = normalize_adc(adc1, chip->gainlevel->gaintime);
+
+	if (!chip->int_enabled)
+		schedule_delayed_work(&chip->poweroff_work, 5 * HZ);
+
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+	if((adc0)>chip->threshold_range) {
+		chip->low_thres = adc0-chip->threshold_range;
+	} else {
+		chip->low_thres = 0x00;
+	}
+	max_range = chip->gainlevel->max;
+	if((adc0) < max_range-chip->threshold_range) {
+		chip->high_thres = adc0+chip->threshold_range;
+	} else {
+		chip->high_thres = max_range;
+	}
+
+	ret = i2c_smbus_write_byte_data(chip->client,
+			TSL2563_CMD | TSL2563_REG_HIGHLOW,
+			chip->high_thres & 0xFF);
+	if (ret)
+		goto out;
+	ret = i2c_smbus_write_byte_data(chip->client,
+			TSL2563_CMD | TSL2563_REG_HIGHHIGH,
+			(chip->high_thres >> 8) & 0xFF);
+	if (ret)
+		goto out;
+	ret = i2c_smbus_write_byte_data(chip->client,
+			TSL2563_CMD | TSL2563_REG_LOWLOW,
+			chip->low_thres & 0xFF);
+	if (ret)
+		goto out;
+	ret = i2c_smbus_write_byte_data(chip->client,
+			TSL2563_CMD | TSL2563_REG_LOWHIGH,
+			(chip->low_thres >> 8) & 0xFF);
+	if (ret)
+		goto out;
+
+	calib0 = calib_adc(chip->data0, chip->calib0) * chip->cover_comp_gain;
+	calib1 = calib_adc(chip->data1, chip->calib1) * chip->cover_comp_gain;
+	chip->lux = (unsigned int) ( adc_to_lux(calib0, calib1)*200 /chip->lux200_calibration );
+	if(chip->control_bl == 1) {
+		adv_set_brightness(adv_bl_levels,chip->lux,BACKLIGHT_PATH,&adv_levels_size);
+	}
+#endif
+	ret = 0;
+
+out:
+	return ret;
 }
+
+static inline int calib_to_sysfs(u32 calib)
+{
+	return (int) (((calib * CALIB_BASE_SYSFS) +
+		       CALIB_FRAC_HALF) >> CALIB_FRAC_BITS);
+}
+
+static inline u32 calib_from_sysfs(int value)
+{
+	return (((u32) value) << CALIB_FRAC_BITS) / CALIB_BASE_SYSFS;
+}
+
+/*
+ * Conversions between lux and ADC values.
+ *
+ * The basic formula is lux = c0 * adc0 - c1 * adc1, where c0 and c1 are
+ * appropriate constants. Different constants are needed for different
+ * kinds of light, determined by the ratio adc1/adc0 (basically the ratio
+ * of the intensities in infrared and visible wavelengths). lux_table below
+ * lists the upper threshold of the adc1/adc0 ratio and the corresponding
+ * constants.
+ */
 
 static int tsl2563_write_raw(struct iio_dev *indio_dev,
 			       struct iio_chan_spec const *chan,
@@ -624,13 +743,16 @@ static irqreturn_t tsl2563_event_handler(int irq, void *private)
 {
 	struct iio_dev *dev_info = private;
 	struct tsl2563_chip *chip = iio_priv(dev_info);
-
 	iio_push_event(dev_info,
 		       IIO_UNMOD_EVENT_CODE(IIO_LIGHT,
 					    0,
 					    IIO_EV_TYPE_THRESH,
 					    IIO_EV_DIR_EITHER),
 		       iio_get_time_ns());
+
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+	tsl2563_get_adc(chip);
+#endif
 
 	/* clear the interrupt and push the event */
 	i2c_smbus_write_byte(chip->client, TSL2563_CMD | TSL2563_CLEARINT);
@@ -695,11 +817,209 @@ static int tsl2563_read_interrupt_config(struct iio_dev *indio_dev,
 
 	return !!(ret & 0x30);
 }
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+static ssize_t tsl2563_show_threshold_range(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct tsl2563_chip *chip = iio_priv(indio_dev);
+	return sprintf(buf, "%d\n", chip->threshold_range);
+}
 
+static ssize_t tsl2563_store_threshold_range(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf,
+		size_t len)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct tsl2563_chip *chip = iio_priv(indio_dev);
+	int ret;
+	long val;
+	ret = kstrtol(buf, 10, &val);
+	if (ret)
+		goto error_ret;
+	chip->threshold_range = val;
+
+error_ret:
+	return len;
+}
+
+static IIO_DEVICE_ATTR(threshold_range,
+		       S_IRUGO | S_IWUSR,
+		       tsl2563_show_threshold_range,
+		       tsl2563_store_threshold_range, 0);
+
+static ssize_t tsl2563_show_lux200_calibration(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct tsl2563_chip *chip = iio_priv(indio_dev);
+	return sprintf(buf, "%d\n", chip->lux200_calibration);
+}
+
+static ssize_t tsl2563_store_lux200_calibration(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf,
+		size_t len)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct tsl2563_chip *chip = iio_priv(indio_dev);
+	int ret;
+	long val;
+	ret = kstrtol(buf, 10, &val);
+	if (ret)
+		goto error_ret;
+	chip->lux200_calibration = val;
+
+error_ret:
+	return len;
+}
+
+static IIO_DEVICE_ATTR(lux200_calibration,
+		       S_IRUGO | S_IWUSR,
+		       tsl2563_show_lux200_calibration,
+		       tsl2563_store_lux200_calibration, 0);
+
+static ssize_t tsl2563_show_control_bl(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct tsl2563_chip *chip = iio_priv(indio_dev);
+	return sprintf(buf, "%d\n", chip->control_bl);
+}
+
+static ssize_t tsl2563_store_control_bl(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf,
+		size_t len)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct tsl2563_chip *chip = iio_priv(indio_dev);
+	int ret;
+	long val;
+	ret = kstrtol(buf, 10, &val);
+	if (ret)
+		goto error_ret;
+	chip->control_bl = val;
+
+error_ret:
+	return len;
+}
+
+static IIO_DEVICE_ATTR(control_bl,
+		       S_IRUGO | S_IWUSR,
+		       tsl2563_show_control_bl,
+		       tsl2563_store_control_bl, 0);
+
+static ssize_t tsl2563_show_lux(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct tsl2563_chip *chip = iio_priv(indio_dev);
+	tsl2563_get_adc(chip);
+	return sprintf(buf, "%d\n", chip->lux);
+}
+
+static ssize_t tsl2563_store_lux(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf,
+		size_t len)
+{
+	return 0;
+}
+
+static IIO_DEVICE_ATTR(lux,
+		       S_IRUGO | S_IWUSR,
+		       tsl2563_show_lux,
+		       tsl2563_store_lux, 0);
+
+static ssize_t tsl2563_show_levels(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	int index = 0;
+	char str[50];
+	char all_str[500]="";
+	for(index = 0;index < adv_levels_size;index++) {
+		sprintf(str, "[%d,%d]", adv_bl_levels[index][0],adv_bl_levels[index][1]);
+		strcat(all_str, str);
+	}
+	return sprintf(buf,"%s\n", all_str);
+}
+
+static ssize_t tsl2563_store_levels(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf,
+		size_t len)
+{
+	char *str = "";
+	int ret=0;
+	strcpy(str, buf);
+	ret = adv_parse_levels(adv_bl_levels, str, &adv_levels_size);
+	if(ret == 0){
+		printk( "levels table update\n");
+	}else {
+		printk( "wrong levels table\n");
+	}
+	return len;
+}
+
+static IIO_DEVICE_ATTR(levels,
+		       S_IRUGO | S_IWUSR,
+		       tsl2563_show_levels,
+		       tsl2563_store_levels, 0);
+#endif
+static ssize_t tsl2563_show_dump_reg(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct tsl2563_chip *chip = iio_priv(indio_dev);
+
+	int index, value;
+	mutex_lock(&chip->lock);
+
+	for (index = 0; index < ARRAY_SIZE(tsl2563_info_table); index++) {
+		value = i2c_smbus_read_byte_data(chip->client,
+				TSL2563_CMD | tsl2563_info_table[index].addr);
+
+		printk(KERN_INFO "[%s] REG %s = 0x%x\n", __func__, tsl2563_info_table[index].name, value);
+	}
+
+	mutex_unlock(&chip->lock);
+
+	return 0;
+}
+
+static IIO_DEVICE_ATTR(dump_reg,
+		       S_IRUGO | S_IWUSR,
+		       tsl2563_show_dump_reg,
+		       NULL, 0);
+
+static struct attribute *tsl2563_attributes[] = {
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+	&iio_dev_attr_levels.dev_attr.attr,
+	&iio_dev_attr_threshold_range.dev_attr.attr,
+	&iio_dev_attr_lux.dev_attr.attr,
+	&iio_dev_attr_lux200_calibration.dev_attr.attr,
+	&iio_dev_attr_control_bl.dev_attr.attr,
+#endif
+	&iio_dev_attr_dump_reg.dev_attr.attr,
+	NULL,
+};
+
+static struct attribute_group tsl2563_attribute_group = {
+	.attrs = tsl2563_attributes,
+};
 static const struct iio_info tsl2563_info_no_irq = {
 	.driver_module = THIS_MODULE,
 	.read_raw = &tsl2563_read_raw,
 	.write_raw = &tsl2563_write_raw,
+	.attrs = &tsl2563_attribute_group,
 };
 
 static const struct iio_info tsl2563_info = {
@@ -710,7 +1030,60 @@ static const struct iio_info tsl2563_info = {
 	.write_event_value = &tsl2563_write_thresh,
 	.read_event_config = &tsl2563_read_interrupt_config,
 	.write_event_config = &tsl2563_write_interrupt_config,
+	.attrs = &tsl2563_attribute_group,
 };
+
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+
+static int tsl2563_enable_interrupt_config(struct tsl2563_chip *chip ,
+	const struct iio_chan_spec *chan, enum iio_event_type type,
+	enum iio_event_direction dir )
+{
+	int ret = 0;
+	int default_enable = 1;
+	chip->low_thres = 0x00;
+	chip->high_thres = 0x30;
+	adv_get_file_value(&chip->threshold_range,THRES_RANGE_PATH);
+	adv_get_file_value(&chip->lux200_calibration,LUX200_CAL_PATH);
+	adv_get_file_value(&chip->control_bl,CONTROL_BL_PATH);
+	adv_get_file_value(&default_enable,AUTO_BL_PATH);
+	adv_get_levels(adv_bl_levels,THRES_LEVELS_PATH,&adv_levels_size);
+	if(default_enable == 0) {
+		return 0;
+	}
+	tsl2563_set_power(chip, 1);
+	mutex_lock(&chip->lock);
+
+	chip->intr &= ~0x30;
+	chip->intr |= 0x10;
+	/* ensure the chip is actually on */
+	cancel_delayed_work(&chip->poweroff_work);
+	if (!tsl2563_get_power(chip)) {
+
+		ret = tsl2563_set_power(chip, 1);
+		if (ret)
+			goto out;
+	}
+	ret = i2c_smbus_write_byte_data(chip->client,
+					TSL2563_CMD | TSL2563_REG_INT,
+					chip->intr);
+
+	ret = tsl2563_configure(chip);
+	if (ret)
+		goto out;
+	chip->int_enabled = true;
+
+out:
+	mutex_unlock(&chip->lock);
+	return ret;
+}
+
+static void tsl2563_int_enable_work(struct work_struct *work)
+{
+	struct tsl2563_chip *chip = container_of(work, struct tsl2563_chip, int_enable_work.work);
+	tsl2563_enable_interrupt_config(chip, tsl2563_channels, IIO_EV_TYPE_THRESH, IIO_EV_DIR_RISING);
+}
+#endif
 
 static int tsl2563_probe(struct i2c_client *client,
 				const struct i2c_device_id *device_id)
@@ -721,7 +1094,11 @@ static int tsl2563_probe(struct i2c_client *client,
 	struct device_node *np = client->dev.of_node;
 	int err = 0;
 	u8 id = 0;
-
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+	int index = 0;
+	int luxs = 50;
+	int bl_level = 30;
+#endif
 	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*chip));
 	if (!indio_dev)
 		return -ENOMEM;
@@ -746,8 +1123,20 @@ static int tsl2563_probe(struct i2c_client *client,
 	mutex_init(&chip->lock);
 
 	/* Default values used until userspace says otherwise */
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+	chip->threshold_range = DEFAULT_THRES_RANGE;
+	chip->lux200_calibration = DEFAULT_LUX200_CAL;
+	chip->control_bl = DEFAULT_CONTROL_BL;
+	for(index = 0;index < DEFAULT_LEVELS_SIZE;index++) {
+		adv_bl_levels[index][0] = luxs;
+		adv_bl_levels[index][1] = bl_level;
+		luxs = luxs*2;
+		bl_level = bl_level + 25;
+	}
+#endif
 	chip->low_thres = 0x0;
 	chip->high_thres = 0xffff;
+
 	chip->gainlevel = tsl2563_gainlevel_table;
 	chip->intr = TSL2563_INT_PERSIST(4);
 	chip->calib0 = calib_from_sysfs(CALIB_BASE_SYSFS);
@@ -802,6 +1191,11 @@ static int tsl2563_probe(struct i2c_client *client,
 		dev_err(&client->dev, "iio registration error %d\n", -err);
 		goto fail;
 	}
+
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+	INIT_DELAYED_WORK(&chip->int_enable_work, tsl2563_int_enable_work);
+	schedule_delayed_work(&chip->int_enable_work, 6 * HZ);
+#endif
 
 	return 0;
 
