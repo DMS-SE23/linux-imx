@@ -246,39 +246,6 @@ static int battery_vpm_get_battery_property(
 	return 0;
 }
 
-
-static int battery_vpm_get_battery_capacity(
-	int reg_offset, enum power_supply_property psp,
-	union power_supply_propval *val)
-{
-	s32 ret;
-
-	ret = battery_vpmread(battery_vpm_data[reg_offset].addr);
-
-	//printk(KERN_INFO ">>> battery_vpm: ([%d] 0x%2X = 0x%4X\n", psp, battery_vpm_data[reg_offset].addr,ret);
-
-	if (ret < 0)
-		return ret;
-
-	if (psp == POWER_SUPPLY_PROP_CAPACITY) {
-		
-		if (ret == BATT_DISATTACHED) {
-			//printk("vpm: battery plug out, set capacity to ZERO\n");
-			val->intval = 0;
-			return 0;
-		}
-	
-		/* battery_vpm spec says that this can be >100 %
-		* even if max value is 100 % */
-		val->intval = min(ret, 100);
-	} else
-		val->intval = ret;
-
-	return 0;
-}
-
-
-
 static int vpm_charger_get_property(struct power_supply *psy,
 		enum power_supply_property psp,
 		union power_supply_propval *val)
@@ -322,7 +289,6 @@ static int battery_vpm_get_property(struct power_supply *psy,
 {
 	int count;
 	int ret;
-	struct battery_vpm_info *battery_vpm_device = psy->drv_data;
 	
 	switch (psp) {
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
@@ -338,6 +304,17 @@ static int battery_vpm_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TEMP:
 	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
+	
+		if ((psp == POWER_SUPPLY_PROP_CAPACITY) || (psp == POWER_SUPPLY_PROP_VOLTAGE_NOW) || (psp == POWER_SUPPLY_PROP_CURRENT_NOW) || (psp == POWER_SUPPLY_PROP_TEMP))
+		{	
+			battery_vpm_get_present(val);
+			if(val->intval == 0)
+			{
+				val->intval = 0xFFFFF; // battery unplug-in
+				return 0;
+			}
+		}
+	
 		for (count = 0; count < ARRAY_SIZE(battery_vpm_data); count++) {
 			if (psp == battery_vpm_data[count].psp)
 				break;
