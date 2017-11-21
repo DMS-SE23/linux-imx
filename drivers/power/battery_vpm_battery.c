@@ -176,7 +176,11 @@ static void  battery_vpm_unit_adjustment(
 #define TIME_UNIT_CONVERSION		600
 #define TEMP_KELVIN_TO_CELCIUS		2731
 	switch (psp) {
-
+	case POWER_SUPPLY_PROP_CAPACITY:	
+		/* battery_vpm spec says that this can be >100 %
+		* even if max value is 100 % */
+		val->intval = min(val->intval, 100);
+		break;
 //	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 //	case POWER_SUPPLY_PROP_CURRENT_NOW:
 //		val->intval *= BASE_UNIT_CONVERSION;
@@ -222,19 +226,22 @@ static int battery_vpm_get_battery_property(
 		
 		if (psp == POWER_SUPPLY_PROP_STATUS) {
 			ret = ret >> 8;
-			if (ret == BATT_CHARGING) // 0x01
-				val->intval = POWER_SUPPLY_STATUS_CHARGING;
-			if (ret == BATT_FULL_CHARGED) // 0x02
-				val->intval = POWER_SUPPLY_STATUS_FULL;
-			if (ret == BATT_DC_OUT) //0x03
-				val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
+			switch (ret) {
+				case BATT_CHARGING:
+					val->intval = POWER_SUPPLY_STATUS_CHARGING;
+					break;
+				case BATT_FULL_CHARGED:
+					val->intval = POWER_SUPPLY_STATUS_FULL;
+					break;
+				case BATT_DC_OUT:
+					val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
+					break;	
+				default:
+					val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
+					break;					
+			}
 		}
-	} else {
-		if (psp == POWER_SUPPLY_PROP_STATUS)
-			val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
-		else
-			val->intval = 0;
-	}
+	} 
 
 	return 0;
 }
@@ -246,17 +253,6 @@ static int battery_vpm_get_battery_capacity(
 {
 	s32 ret;
 
-	ret = battery_vpm_read_command(VPM_BATTERY_PACK_STATE_OF_CHARGE);
-
-
-	ret = ret && 0x00FF;
-	
-	if (ret == BATT_DISATTACHED) {
-		//printk("vpm: battery plug out, set capacity to ZERO\n");
-		val->intval = 0;
-		return 0;
-	}
-
 	ret = battery_vpmread(battery_vpm_data[reg_offset].addr);
 
 	//printk(KERN_INFO ">>> battery_vpm: ([%d] 0x%2X = 0x%4X\n", psp, battery_vpm_data[reg_offset].addr,ret);
@@ -265,6 +261,13 @@ static int battery_vpm_get_battery_capacity(
 		return ret;
 
 	if (psp == POWER_SUPPLY_PROP_CAPACITY) {
+		
+		if (ret == BATT_DISATTACHED) {
+			//printk("vpm: battery plug out, set capacity to ZERO\n");
+			val->intval = 0;
+			return 0;
+		}
+	
 		/* battery_vpm spec says that this can be >100 %
 		* even if max value is 100 % */
 		val->intval = min(ret, 100);
@@ -320,27 +323,15 @@ static int battery_vpm_get_property(struct power_supply *psy,
 	int count;
 	int ret;
 	struct battery_vpm_info *battery_vpm_device = psy->drv_data;
-
+	
 	switch (psp) {
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
 		break;
-
-	case POWER_SUPPLY_PROP_CAPACITY:
-		for (count = 0; count < ARRAY_SIZE(battery_vpm_data); count++) {
-			if (psp == battery_vpm_data[count].psp)
-				break;
-		}
-
-		ret = battery_vpm_get_battery_capacity(count, psp, val);
-		if (ret)
-			return ret;
-
-		break;
-
 	case POWER_SUPPLY_PROP_PRESENT:
 		battery_vpm_get_present(val);
 		break;
+	case POWER_SUPPLY_PROP_CAPACITY:
 	case POWER_SUPPLY_PROP_STATUS:
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
