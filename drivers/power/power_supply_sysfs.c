@@ -91,7 +91,9 @@ static ssize_t power_supply_show_property(struct device *dev,
 
 	if (off == POWER_SUPPLY_PROP_STATUS)
 		return sprintf(buf, "%s\n", status_text[value.intval]);
-	else if ((off == POWER_SUPPLY_PROP_CAPACITY) || (off == POWER_SUPPLY_PROP_VOLTAGE_NOW) || (off == POWER_SUPPLY_PROP_CURRENT_NOW) || (off == POWER_SUPPLY_PROP_TEMP))
+	else if ((off == POWER_SUPPLY_PROP_CAPACITY) || (off == POWER_SUPPLY_PROP_VOLTAGE_NOW) || \
+			(off == POWER_SUPPLY_PROP_CURRENT_NOW) || (off == POWER_SUPPLY_PROP_TEMP) || \
+			(off == POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG) || (off == POWER_SUPPLY_PROP_TIME_TO_FULL_AVG))
 		{
 			if(value.intval == 0xFFFFF)
 				return sprintf(buf, "%s\n", "Unknown");
@@ -99,13 +101,6 @@ static ssize_t power_supply_show_property(struct device *dev,
 			    return sprintf(buf, "%d\n", value.intval);
 
 		}
-	//else if (off == POWER_SUPPLY_PROP_TEMP)
-	//	{
-	//		if(value.intval == -2731)
-	//			return sprintf(buf, "%s\n", "Unknown");
-	//		else
-	//		    return sprintf(buf, "%d\n", value.intval);
-	//	}
 	else if (off == POWER_SUPPLY_PROP_CHARGE_TYPE)
 		return sprintf(buf, "%s\n", charge_type[value.intval]);
 	else if (off == POWER_SUPPLY_PROP_HEALTH)

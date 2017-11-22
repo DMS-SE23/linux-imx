@@ -305,7 +305,9 @@ static int battery_vpm_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
 	
-		if ((psp == POWER_SUPPLY_PROP_CAPACITY) || (psp == POWER_SUPPLY_PROP_VOLTAGE_NOW) || (psp == POWER_SUPPLY_PROP_CURRENT_NOW) || (psp == POWER_SUPPLY_PROP_TEMP))
+		if ((psp == POWER_SUPPLY_PROP_CAPACITY) || (psp == POWER_SUPPLY_PROP_VOLTAGE_NOW) || \
+			(psp == POWER_SUPPLY_PROP_CURRENT_NOW) || (psp == POWER_SUPPLY_PROP_TEMP) || \
+			(psp == POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG) || (psp == POWER_SUPPLY_PROP_TIME_TO_FULL_AVG))
 		{	
 			battery_vpm_get_present(val);
 			if(val->intval == 0)
