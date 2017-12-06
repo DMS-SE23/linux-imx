@@ -40,6 +40,7 @@
 #include <linux/iio/events.h>
 #include <linux/platform_data/tsl2563.h>
 
+#include <linux/input.h>
 #include <linux/syscalls.h>
 #include <linux/fs.h>
 #include <linux/file.h>
@@ -49,8 +50,6 @@
 #ifdef CONFIG_SENSORS_ADV_AUTOBL
 #include <linux/adv_autobl.h>
 #define DEFAULT_THRES_RANGE  50
-#define DEFAULT_LUX200_CAL  200
-#define DEFAULT_CONTROL_BL    1
 #endif
 
 /* Use this many bits for fraction part. */
@@ -195,9 +194,7 @@ struct tsl2563_chip {
 	u16			high_thres;
 #ifdef CONFIG_SENSORS_ADV_AUTOBL
 	int			threshold_range;
-	int			lux200_calibration;
 	int			lux;
-	int         control_bl;
 #endif
 	u8			intr;
 	bool		int_enabled;
@@ -210,6 +207,10 @@ struct tsl2563_chip {
 	/* Cache current values, to be returned while suspended */
 	u32			data0;
 	u32			data1;
+
+	struct input_dev	*input;
+
+	char			phys[32];
 };
 
 static int tsl2563_set_power(struct tsl2563_chip *chip, int on)
@@ -538,10 +539,8 @@ static int tsl2563_get_adc(struct tsl2563_chip *chip)
 
 	calib0 = calib_adc(chip->data0, chip->calib0) * chip->cover_comp_gain;
 	calib1 = calib_adc(chip->data1, chip->calib1) * chip->cover_comp_gain;
-	chip->lux = (unsigned int) ( adc_to_lux(calib0, calib1)*200 /chip->lux200_calibration );
-	if(chip->control_bl == 1) {
-		adv_set_brightness(adv_bl_levels,chip->lux,BACKLIGHT_PATH,&adv_levels_size);
-	}
+	chip->lux = (unsigned int) (adc_to_lux(calib0, calib1));
+
 #endif
 	ret = 0;
 
@@ -743,6 +742,11 @@ static irqreturn_t tsl2563_event_handler(int irq, void *private)
 {
 	struct iio_dev *dev_info = private;
 	struct tsl2563_chip *chip = iio_priv(dev_info);
+
+	u32 calib0, calib1;
+	int lux;
+	int ret;
+
 	iio_push_event(dev_info,
 		       IIO_UNMOD_EVENT_CODE(IIO_LIGHT,
 					    0,
@@ -750,12 +754,23 @@ static irqreturn_t tsl2563_event_handler(int irq, void *private)
 					    IIO_EV_DIR_EITHER),
 		       iio_get_time_ns());
 
-#ifdef CONFIG_SENSORS_ADV_AUTOBL
-	tsl2563_get_adc(chip);
-#endif
-
 	/* clear the interrupt and push the event */
 	i2c_smbus_write_byte(chip->client, TSL2563_CMD | TSL2563_CLEARINT);
+
+	ret = tsl2563_get_adc(chip);
+	if (ret)
+		goto out;
+
+	calib0 = calib_adc(chip->data0, chip->calib0) *
+				chip->cover_comp_gain;
+	calib1 = calib_adc(chip->data1, chip->calib1) *
+				chip->cover_comp_gain;
+	lux = adc_to_lux(calib0, calib1);
+
+	input_report_abs(chip->input, ABS_MISC, lux);
+	input_sync(chip->input);
+
+out:
 	return IRQ_HANDLED;
 }
 
@@ -822,8 +837,7 @@ static ssize_t tsl2563_show_threshold_range(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
-	struct iio_dev *indio_dev = dev_get_drvdata(dev);
-	struct tsl2563_chip *chip = iio_priv(indio_dev);
+	struct tsl2563_chip *chip = iio_priv(dev_get_drvdata(dev));
 	return sprintf(buf, "%d\n", chip->threshold_range);
 }
 
@@ -832,14 +846,13 @@ static ssize_t tsl2563_store_threshold_range(struct device *dev,
 		const char *buf,
 		size_t len)
 {
-	struct iio_dev *indio_dev = dev_get_drvdata(dev);
-	struct tsl2563_chip *chip = iio_priv(indio_dev);
-	int ret;
-	long val;
-	ret = kstrtol(buf, 10, &val);
+	struct tsl2563_chip *chip = iio_priv(dev_get_drvdata(dev));
+	int ret,val;
+	ret = kstrtoint(buf, 10, &val);
 	if (ret)
 		goto error_ret;
-	chip->threshold_range = val;
+	if(val > 0)
+		chip->threshold_range = val;
 
 error_ret:
 	return len;
@@ -850,76 +863,11 @@ static IIO_DEVICE_ATTR(threshold_range,
 		       tsl2563_show_threshold_range,
 		       tsl2563_store_threshold_range, 0);
 
-static ssize_t tsl2563_show_lux200_calibration(struct device *dev,
-		struct device_attribute *attr,
-		char *buf)
-{
-	struct iio_dev *indio_dev = dev_get_drvdata(dev);
-	struct tsl2563_chip *chip = iio_priv(indio_dev);
-	return sprintf(buf, "%d\n", chip->lux200_calibration);
-}
-
-static ssize_t tsl2563_store_lux200_calibration(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf,
-		size_t len)
-{
-	struct iio_dev *indio_dev = dev_get_drvdata(dev);
-	struct tsl2563_chip *chip = iio_priv(indio_dev);
-	int ret;
-	long val;
-	ret = kstrtol(buf, 10, &val);
-	if (ret)
-		goto error_ret;
-	chip->lux200_calibration = val;
-
-error_ret:
-	return len;
-}
-
-static IIO_DEVICE_ATTR(lux200_calibration,
-		       S_IRUGO | S_IWUSR,
-		       tsl2563_show_lux200_calibration,
-		       tsl2563_store_lux200_calibration, 0);
-
-static ssize_t tsl2563_show_control_bl(struct device *dev,
-		struct device_attribute *attr,
-		char *buf)
-{
-	struct iio_dev *indio_dev = dev_get_drvdata(dev);
-	struct tsl2563_chip *chip = iio_priv(indio_dev);
-	return sprintf(buf, "%d\n", chip->control_bl);
-}
-
-static ssize_t tsl2563_store_control_bl(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf,
-		size_t len)
-{
-	struct iio_dev *indio_dev = dev_get_drvdata(dev);
-	struct tsl2563_chip *chip = iio_priv(indio_dev);
-	int ret;
-	long val;
-	ret = kstrtol(buf, 10, &val);
-	if (ret)
-		goto error_ret;
-	chip->control_bl = val;
-
-error_ret:
-	return len;
-}
-
-static IIO_DEVICE_ATTR(control_bl,
-		       S_IRUGO | S_IWUSR,
-		       tsl2563_show_control_bl,
-		       tsl2563_store_control_bl, 0);
-
 static ssize_t tsl2563_show_lux(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
-	struct iio_dev *indio_dev = dev_get_drvdata(dev);
-	struct tsl2563_chip *chip = iio_priv(indio_dev);
+	struct tsl2563_chip *chip = iio_priv(dev_get_drvdata(dev));
 	tsl2563_get_adc(chip);
 	return sprintf(buf, "%d\n", chip->lux);
 }
@@ -929,6 +877,7 @@ static ssize_t tsl2563_store_lux(struct device *dev,
 		const char *buf,
 		size_t len)
 {
+	//do nothing
 	return 0;
 }
 
@@ -937,48 +886,12 @@ static IIO_DEVICE_ATTR(lux,
 		       tsl2563_show_lux,
 		       tsl2563_store_lux, 0);
 
-static ssize_t tsl2563_show_levels(struct device *dev,
-		struct device_attribute *attr,
-		char *buf)
-{
-	int index = 0;
-	char str[50];
-	char all_str[500]="";
-	for(index = 0;index < adv_levels_size;index++) {
-		sprintf(str, "[%d,%d]", adv_bl_levels[index][0],adv_bl_levels[index][1]);
-		strcat(all_str, str);
-	}
-	return sprintf(buf,"%s\n", all_str);
-}
-
-static ssize_t tsl2563_store_levels(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf,
-		size_t len)
-{
-	char *str = "";
-	int ret=0;
-	strcpy(str, buf);
-	ret = adv_parse_levels(adv_bl_levels, str, &adv_levels_size);
-	if(ret == 0){
-		printk( "levels table update\n");
-	}else {
-		printk( "wrong levels table\n");
-	}
-	return len;
-}
-
-static IIO_DEVICE_ATTR(levels,
-		       S_IRUGO | S_IWUSR,
-		       tsl2563_show_levels,
-		       tsl2563_store_levels, 0);
 #endif
 static ssize_t tsl2563_show_dump_reg(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
-	struct iio_dev *indio_dev = dev_get_drvdata(dev);
-	struct tsl2563_chip *chip = iio_priv(indio_dev);
+	struct tsl2563_chip *chip = iio_priv(dev_get_drvdata(dev));
 
 	int index, value;
 	mutex_lock(&chip->lock);
@@ -1002,11 +915,8 @@ static IIO_DEVICE_ATTR(dump_reg,
 
 static struct attribute *tsl2563_attributes[] = {
 #ifdef CONFIG_SENSORS_ADV_AUTOBL
-	&iio_dev_attr_levels.dev_attr.attr,
 	&iio_dev_attr_threshold_range.dev_attr.attr,
 	&iio_dev_attr_lux.dev_attr.attr,
-	&iio_dev_attr_lux200_calibration.dev_attr.attr,
-	&iio_dev_attr_control_bl.dev_attr.attr,
 #endif
 	&iio_dev_attr_dump_reg.dev_attr.attr,
 	NULL,
@@ -1040,15 +950,13 @@ static int tsl2563_enable_interrupt_config(struct tsl2563_chip *chip ,
 	enum iio_event_direction dir )
 {
 	int ret = 0;
-	int default_enable = 1;
 	chip->low_thres = 0x00;
 	chip->high_thres = 0x30;
-	adv_get_file_value(&chip->threshold_range,THRES_RANGE_PATH);
-	adv_get_file_value(&chip->lux200_calibration,LUX200_CAL_PATH);
-	adv_get_file_value(&chip->control_bl,CONTROL_BL_PATH);
-	adv_get_file_value(&default_enable,AUTO_BL_PATH);
-	adv_get_levels(adv_bl_levels,THRES_LEVELS_PATH,&adv_levels_size);
-	if(default_enable == 0) {
+	adv_get_file_value(&ret,THRES_RANGE_PATH);
+	if(ret > 0)
+		chip->threshold_range = ret;
+	adv_get_file_value(&ret,AUTO_BL_PATH);
+	if(ret == 0) {
 		return 0;
 	}
 	tsl2563_set_power(chip, 1);
@@ -1094,11 +1002,8 @@ static int tsl2563_probe(struct i2c_client *client,
 	struct device_node *np = client->dev.of_node;
 	int err = 0;
 	u8 id = 0;
-#ifdef CONFIG_SENSORS_ADV_AUTOBL
-	int index = 0;
-	int luxs = 50;
-	int bl_level = 30;
-#endif
+	struct input_dev *input_dev;
+
 	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*chip));
 	if (!indio_dev)
 		return -ENOMEM;
@@ -1106,6 +1011,10 @@ static int tsl2563_probe(struct i2c_client *client,
 	chip = iio_priv(indio_dev);
 
 	i2c_set_clientdata(client, chip);
+
+	snprintf(chip->phys, sizeof(chip->phys),
+		 "%s", dev_name(&client->dev));
+
 	chip->client = client;
 
 	err = tsl2563_detect(chip);
@@ -1125,14 +1034,6 @@ static int tsl2563_probe(struct i2c_client *client,
 	/* Default values used until userspace says otherwise */
 #ifdef CONFIG_SENSORS_ADV_AUTOBL
 	chip->threshold_range = DEFAULT_THRES_RANGE;
-	chip->lux200_calibration = DEFAULT_LUX200_CAL;
-	chip->control_bl = DEFAULT_CONTROL_BL;
-	for(index = 0;index < DEFAULT_LEVELS_SIZE;index++) {
-		adv_bl_levels[index][0] = luxs;
-		adv_bl_levels[index][1] = bl_level;
-		luxs = luxs*2;
-		bl_level = bl_level + 25;
-	}
 #endif
 	chip->low_thres = 0x0;
 	chip->high_thres = 0xffff;
@@ -1189,17 +1090,41 @@ static int tsl2563_probe(struct i2c_client *client,
 	err = iio_device_register(indio_dev);
 	if (err) {
 		dev_err(&client->dev, "iio registration error %d\n", -err);
-		goto fail;
+		goto iio_fail;
+	}
+
+	/* add input device */
+	input_dev = input_allocate_device();
+
+	if (!input_dev) {
+		err = -ENOMEM;
+		goto input_fail;
+	}
+
+	chip->input = input_dev;
+	input_dev->name = client->name;
+	input_dev->id.bustype = BUS_I2C;
+	input_dev->phys = chip->phys;
+
+	__set_bit(EV_ABS, input_dev->evbit);
+	input_set_abs_params(input_dev, ABS_MISC, 0, 65535, 0, 0);
+	err = input_register_device(input_dev);
+	if(err) {
+		printk("input_register_device fail");
+		input_free_device(input_dev);
+		goto input_fail;
 	}
 
 #ifdef CONFIG_SENSORS_ADV_AUTOBL
 	INIT_DELAYED_WORK(&chip->int_enable_work, tsl2563_int_enable_work);
-	schedule_delayed_work(&chip->int_enable_work, 6 * HZ);
+	schedule_delayed_work(&chip->int_enable_work, 7 * HZ);
 #endif
 
 	return 0;
 
-fail:
+input_fail:
+	iio_device_unregister(indio_dev);
+iio_fail:
 	cancel_delayed_work(&chip->poweroff_work);
 	flush_scheduled_work();
 	return err;

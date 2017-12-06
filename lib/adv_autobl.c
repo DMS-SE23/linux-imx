@@ -20,13 +20,13 @@
 
 void adv_get_file_value(int *data,char *path)
 {
-	int fd,val,buff_size=100;
-	u8  Buff[buff_size];
+	int fd = 0,val = 0,buff_size = 100;
+	u8 Buff[buff_size];
 	mm_segment_t old_fs = get_fs();
 	memset(Buff, 0x00, sizeof(Buff));
 	set_fs(KERNEL_DS);
 	fd = sys_open(path, O_RDONLY, 0);
-	if(fd>=0)
+	if(fd >= 0)
 	{
 		sys_read(fd, Buff, buff_size);
 		printk("%s: %s", path, Buff);
@@ -56,12 +56,12 @@ void adv_set_brightness(int levels[LEVELS_ARRAY_SIZE][2],int lux,char *path,int 
 	mm_segment_t old_fs;
 	struct file *fp;
 	char *buf = "1";
-	int ret = 0,level = 255,index;
+	int ret = 0,level = 255,index = 0;
 	loff_t pos = 0x00;
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 
-	for(index=0;index<*levels_size;index++) {
+	for(index = 0; index < *levels_size; index++) {
 		if(lux < levels[index][0]){
 			level = levels[index][1];
 			index = *levels_size;
@@ -88,10 +88,7 @@ EXPORT_SYMBOL(adv_set_brightness);
 
 int adv_parse_levels(int bl_levels[LEVELS_ARRAY_SIZE][2],char *str ,int *levels_size)
 {
-	int temp_size = 0;
-	int temp_lux = 0;
-	int temp_bl = 0;
-	int temp_value = 0;
+	int temp_size = 0, temp_lux = 0, temp_bl = 0, temp_value = 0;
 	int temp_levels[LEVELS_ARRAY_SIZE][2];
     char delim[] = " [,]";
     char *token;
@@ -120,9 +117,8 @@ EXPORT_SYMBOL(adv_parse_levels);
 
 void adv_get_levels(int bl_levels[LEVELS_ARRAY_SIZE][2] ,char *path,int *levels_size)
 {
-	int ret = 0, buff_size = LEVELS_ARRAY_SIZE*2*8;
+	int ret = 0, fd = 0, buff_size = LEVELS_ARRAY_SIZE*2*8;
 	char Buff[buff_size];
-	int fd;
 	mm_segment_t old_fs = get_fs();
 	memset(Buff, 0x00, sizeof(Buff));
 	set_fs(KERNEL_DS);
