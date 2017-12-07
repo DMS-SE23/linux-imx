@@ -18,11 +18,16 @@
 #include <linux/i2c.h>
 #include <linux/clk.h>
 #include <sound/soc.h>
+#include <linux/delay.h>
+#include <linux/notifier.h>
+#include <linux/reboot.h>
 
 #include "../codecs/sgtl5000.h"
 #include "imx-audmux.h"
 
 #define DAI_NAME_SIZE	32
+
+int amp_pwr_en_gpios = -1, amp_mute_gpios = -1;
 
 struct imx_sgtl5000_data {
 	struct snd_soc_dai_link dai;
@@ -57,6 +62,27 @@ static const struct snd_soc_dapm_widget imx_sgtl5000_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("Ext Spk", NULL),
 };
 
+
+
+static int sgtl5000_notifier_notify_shutdown(struct notifier_block *this,  
+       unsigned long code, void *x)  
+{  
+    if ((code == SYS_POWER_OFF) || (code == SYS_DOWN)|| (code == SYS_RESTART))
+ 	{ 
+		printk("[Cifese] turn off amp and pwr"); 
+		gpio_direction_output(amp_mute_gpios, 1);
+		mdelay(100);
+        gpio_direction_output(amp_pwr_en_gpios, 1);
+    }
+    return NOTIFY_DONE;  
+} 
+
+static struct notifier_block imx_sgtl5000_notifier = {
+    .notifier_call  = sgtl5000_notifier_notify_shutdown,
+    .next       = NULL,
+    .priority   = INT_MAX, /* should be > ssd pri's and disk dev pri's */
+};
+
 static int imx_sgtl5000_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -65,7 +91,7 @@ static int imx_sgtl5000_probe(struct platform_device *pdev)
 	struct i2c_client *codec_dev;
 	struct imx_sgtl5000_data *data = NULL;
 	int int_port, ext_port;
-	int amp_pwr_en_gpios = -1, amp_mute_gpios = -1;
+	
 	int ret;
 
 	ret = of_property_read_u32(np, "mux-int-port", &int_port);
@@ -191,8 +217,16 @@ static int imx_sgtl5000_probe(struct platform_device *pdev)
 
 	of_node_put(ssi_np);
 	of_node_put(codec_np);
+	
+	if (register_reboot_notifier(&imx_sgtl5000_notifier))
+	{
+		goto exit_free_imx_sgtl5000_notifier;
+	}
 
 	return 0;
+	
+exit_free_imx_sgtl5000_notifier:
+	unregister_reboot_notifier(&imx_sgtl5000_notifier);
 
 fail:
 	if (data && !IS_ERR(data->codec_clk))
@@ -229,6 +263,7 @@ static struct platform_driver imx_sgtl5000_driver = {
 	.remove = imx_sgtl5000_remove,
 };
 module_platform_driver(imx_sgtl5000_driver);
+
 
 MODULE_AUTHOR("Shawn Guo <shawn.guo@linaro.org>");
 MODULE_DESCRIPTION("Freescale i.MX SGTL5000 ASoC machine driver");
