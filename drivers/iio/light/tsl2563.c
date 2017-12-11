@@ -868,7 +868,6 @@ static ssize_t tsl2563_show_lux(struct device *dev,
 		char *buf)
 {
 	struct tsl2563_chip *chip = iio_priv(dev_get_drvdata(dev));
-	tsl2563_get_adc(chip);
 	return sprintf(buf, "%d\n", chip->lux);
 }
 
