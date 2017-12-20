@@ -70,6 +70,9 @@
 #define REPORTID_MTOUCH		0x06//0x04
 #define MAX_RESOLUTION		4095
 
+#define SE23_X_RES 1280
+#define SE23_Y_RES 800
+
 // running mode
 #define MODE_STOP	0
 #define MODE_WORKING	1
@@ -447,6 +450,9 @@ static void ProcessReport(unsigned char *buf, struct _egalax_i2c *p_egalax_i2c)
 		y = MAX_RESOLUTION-y;
 	#endif
 
+	x = abs(( x * SE23_X_RES )/MAX_RESOLUTION) ;
+	y = abs(( y * SE23_Y_RES )/MAX_RESOLUTION) ;
+
 		pContactBuf[RecvPtsCnt].ID = contactID;
 		pContactBuf[RecvPtsCnt].Status = status;
 		pContactBuf[RecvPtsCnt].X = x;
@@ -477,7 +483,6 @@ static void ProcessReport(unsigned char *buf, struct _egalax_i2c *p_egalax_i2c)
 				input_report_abs(input_dev, ABS_MT_WIDTH_MAJOR, 0);
 				input_mt_sync(input_dev);
 			#endif
-
 				if(pContactBuf[i].Status)
 					cnt_down++;
 				else
@@ -520,8 +525,10 @@ static struct input_dev * allocate_Input_Dev(void)
 #ifndef CONFIG_HAS_EARLYSUSPEND //We use this config to distinguish Linux and Android
 	set_bit(EV_KEY, pInputDev->evbit);
 	__set_bit(BTN_TOUCH, pInputDev->keybit);
-	input_set_abs_params(pInputDev, ABS_X, 0, MAX_RESOLUTION, 0, 0);
-	input_set_abs_params(pInputDev, ABS_Y, 0, MAX_RESOLUTION, 0, 0);
+	input_set_abs_params(pInputDev, ABS_X, 0, SE23_X_RES, 0, 0);
+	input_set_abs_params(pInputDev, ABS_Y, 0, SE23_Y_RES, 0, 0);
+	//input_set_abs_params(pInputDev, ABS_X, 0, MAX_RESOLUTION, 0, 0);
+	//input_set_abs_params(pInputDev, ABS_Y, 0, MAX_RESOLUTION, 0, 0);
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,0,0)
@@ -531,13 +538,18 @@ static struct input_dev * allocate_Input_Dev(void)
 	#else
 		input_mt_init_slots(pInputDev, MAX_SUPPORT_POINT);
 	#endif
-	input_set_abs_params(pInputDev, ABS_MT_POSITION_X, 0, MAX_RESOLUTION, 0, 0);
-	input_set_abs_params(pInputDev, ABS_MT_POSITION_Y, 0, MAX_RESOLUTION, 0, 0);
+	//input_set_abs_params(pInputDev, ABS_MT_POSITION_X, 0, MAX_RESOLUTION, 0, 0);
+	//input_set_abs_params(pInputDev, ABS_MT_POSITION_Y, 0, MAX_RESOLUTION, 0, 0);
+	input_set_abs_params(pInputDev, ABS_MT_POSITION_X, 0, SE23_X_RES, 0, 0);
+	input_set_abs_params(pInputDev, ABS_MT_POSITION_Y, 0, SE23_Y_RES, 0, 0);
 	input_set_abs_params(pInputDev, ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0);
 #else
-	input_set_abs_params(pInputDev, ABS_MT_POSITION_X, 0, MAX_RESOLUTION, 0, 0);
-	input_set_abs_params(pInputDev, ABS_MT_POSITION_Y, 0, MAX_RESOLUTION, 0, 0);
-	input_set_abs_params(pInputDev, ABS_MT_WIDTH_MAJOR, 0, MAX_RESOLUTION, 0, 0); //Size
+	input_set_abs_params(pInputDev, ABS_MT_POSITION_X, 0, SE23_X_RES, 0, 0);
+	input_set_abs_params(pInputDev, ABS_MT_POSITION_Y, 0, SE23_Y_RES, 0, 0);
+	input_set_abs_params(pInputDev, ABS_MT_WIDTH_MAJOR, 0, SE23_X_RES, 0, 0); //Size
+	//input_set_abs_params(pInputDev, ABS_MT_POSITION_X, 0, MAX_RESOLUTION, 0, 0);
+	//input_set_abs_params(pInputDev, ABS_MT_POSITION_Y, 0, MAX_RESOLUTION, 0, 0);
+	//input_set_abs_params(pInputDev, ABS_MT_WIDTH_MAJOR, 0, MAX_RESOLUTION, 0, 0); //Size
 	input_set_abs_params(pInputDev, ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0); //Pressure
 	input_set_abs_params(pInputDev, ABS_MT_TRACKING_ID, 0, MAX_SUPPORT_POINT, 0, 0);
 #endif // #if LINUX_VERSION_CODE > KERNEL_VERSION(3,0,0)
@@ -638,7 +650,7 @@ static void egalax_i2c_wq_irq(struct work_struct *work)
 	struct i2c_client *client = egalax_i2c->client;
 
 	EGALAX_DBG(DBG_INT, " egalax_i2c_wq run\n");
-
+	mutex_lock(&egalax_i2c->mutex_wq);
 	/*continue recv data*/
 	while( !gpio_get_value(egalax_i2c->interrupt_gpio) )
 	{
@@ -650,7 +662,7 @@ static void egalax_i2c_wq_irq(struct work_struct *work)
 		egalax_i2c->skip_packet = 0;
 
 	enable_irq(client->irq);
-
+	mutex_unlock(&egalax_i2c->mutex_wq);
 	EGALAX_DBG(DBG_INT, " egalax_i2c_wq leave\n");
 }
 
