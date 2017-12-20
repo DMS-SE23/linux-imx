@@ -160,6 +160,15 @@ static const struct tsl2563_info tsl2563_info_table[] = {
 	},
 };
 
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+ static const struct tsl2563_gainlevel_coeff tsl2563_gainlevel_table[] = {
+	{
+		.gaintime	= TSL2563_TIMING_100MS | TSL2563_TIMING_GAIN1,
+		.min		= 0,
+		.max		= 65535,
+	},
+};
+#else
 static const struct tsl2563_gainlevel_coeff tsl2563_gainlevel_table[] = {
 	{
 		.gaintime	= TSL2563_TIMING_400MS | TSL2563_TIMING_GAIN16,
@@ -179,6 +188,7 @@ static const struct tsl2563_gainlevel_coeff tsl2563_gainlevel_table[] = {
 		.max		= 65535,
 	},
 };
+#endif
 
 struct tsl2563_chip {
 	struct mutex		lock;
