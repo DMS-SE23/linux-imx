@@ -821,6 +821,12 @@ static int tsl2563_write_interrupt_config(struct iio_dev *indio_dev,
 		schedule_delayed_work(&chip->poweroff_work, 5 * HZ);
 	}
 out:
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+	if(chip->int_enabled == true) {
+		msleep(400);
+		tsl2563_event_handler(chip->client->irq, indio_dev);
+	}
+#endif
 	mutex_unlock(&chip->lock);
 
 	return ret;
