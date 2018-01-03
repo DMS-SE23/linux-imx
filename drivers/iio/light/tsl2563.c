@@ -205,6 +205,8 @@ struct tsl2563_chip {
 #ifdef CONFIG_SENSORS_ADV_AUTOBL
 	int			threshold_range;
 	int			lux;
+	int			last_lux;
+	bool			first_event;
 #endif
 	u8			intr;
 	bool		int_enabled;
@@ -775,9 +777,16 @@ static irqreturn_t tsl2563_event_handler(int irq, void *private)
 				chip->cover_comp_gain;
 	calib1 = calib_adc(chip->data1, chip->calib1) *
 				chip->cover_comp_gain;
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
 	lux = adc_to_lux(calib0, calib1);
-
+	if(lux > 0 && chip->last_lux == lux && chip->first_event == true) {
+		lux++;
+	}
+#endif
 	input_report_abs(chip->input, ABS_MISC, lux);
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+	chip->last_lux = lux;
+#endif
 	input_sync(chip->input);
 
 out:
@@ -824,7 +833,9 @@ out:
 #ifdef CONFIG_SENSORS_ADV_AUTOBL
 	if(chip->int_enabled == true) {
 		msleep(400);
+		chip->first_event = true;
 		tsl2563_event_handler(chip->client->irq, indio_dev);
+		chip->first_event = false;
 	}
 #endif
 	mutex_unlock(&chip->lock);
