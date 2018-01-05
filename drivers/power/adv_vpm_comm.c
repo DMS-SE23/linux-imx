@@ -191,61 +191,24 @@ void vpm_keypad_event_handler_func(void)
 }
 #endif	
 
-void vpm_power_off_event_handler_func(void)
+static void vpm_power_off_event_handler_func(void)
 {
-	int source_id = 0;
-	
-	
-	//ret=adv_vpm_read_poweroff_source();
-	source_id = event_data;
 	__set_bit(ADV_POWER_OFF_KEYCODE, tbtnDev->keybit);
 
-	//printk("VPM: vpm_power_off_event_handler_func %d\n", ret);
+	//printk("VPM: vpm_power_off_event_handler_func %d\n", event_data);
 	
-	switch (source_id) {
-        case POWER_IGNITION_OFF:
-		dbg("get POWER_IGNITION_OFF\n");
-		printk("VPM: Power off POWER_IGNITION_OFF %d\n", ADV_POWER_OFF_KEYCODE);
+	if (event_data == 1)
+	{
+		printk("VPM: power_off %d press down\n", ADV_POWER_OFF_KEYCODE);
 		input_report_key(tbtnDev, ADV_POWER_OFF_KEYCODE, 1);
 		input_sync(tbtnDev);
-		msleep(200);
+	}
+	else
+	{
+		printk("VPM: power_off %d release\n", ADV_POWER_OFF_KEYCODE);
 		input_report_key(tbtnDev, ADV_POWER_OFF_KEYCODE, 0);
 		input_sync(tbtnDev);
-		break;
-    case POWER_CAR_POWER_LOW:
-		dbg("get POWER_CAR_POWER_LOW\n"); 
-		printk("VPM: Power off POWER_CAR_POWER_LOW %d\n", ADV_POWER_OFF_KEYCODE);
-		input_report_key(tbtnDev, ADV_POWER_OFF_KEYCODE, 1);
-		input_sync(tbtnDev);
-		msleep(200);
-		input_report_key(tbtnDev, ADV_POWER_OFF_KEYCODE, 0);
-		input_sync(tbtnDev);
-		break;
-	case POWER_BATTERY_LOW:
-		dbg("get POWER_BATTERY_LOW\n"); 
-		printk("VPM: POWER_BATTERY_LOW %d\n", ADV_POWER_OFF_KEYCODE);
-		input_report_key(tbtnDev, ADV_POWER_OFF_KEYCODE, 1);
-		input_sync(tbtnDev);
-		msleep(200);
-		input_report_key(tbtnDev, ADV_POWER_OFF_KEYCODE, 0);
-		input_sync(tbtnDev);
-		break;
-	case POWER_SHUTDOWN_FLAG_ENABLE:
-		dbg("get POWER_SHUTDOWN_FLAG_ENABLE\n");
-		printk("VPM: Power off POWER_SHUTDOWN_FLAG_ENABLE %d\n", ADV_POWER_OFF_KEYCODE);
-		input_report_key(tbtnDev, ADV_POWER_OFF_KEYCODE, 1);
-		input_sync(tbtnDev);
-		msleep(200);
-		input_report_key(tbtnDev, ADV_POWER_OFF_KEYCODE, 0);
-		input_sync(tbtnDev);
-		break;
-	
-    default:
-		dbg("OTHER POWER SOURCE\n");
-		printk("VPM: OTHER POWER SOURCE\n");
-		break;
-		}
-
+	}
 }
 
 int adv_i2c_tf(struct adv_vpm_data *tf_data)
@@ -640,6 +603,7 @@ static void adv_vpm_event_work(struct work_struct *work)
 #endif	//adv_vpm_comm_0630
 		case VPM_POWER_OFF_EVENT:
 			(*vpm_event_handler_array[VPM_POWER_OFF_EVENT])();
+			//printk("VPM INTERRUPT: VPM_POWER_OFF_EVENT \n");
 			break;
 
 		default:
@@ -916,11 +880,12 @@ static int adv_vpm_probe(struct i2c_client *client, const struct i2c_device_id *
 
 	tbtnDev->name = "adv_vpm_key";
 	tbtnDev->id.bustype = BUS_I2C;
-	tbtnDev->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_ABS);  
+	tbtnDev->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_ABS) | BIT_MASK(EV_REP);
        tbtnDev->keybit[BIT_WORD(BTN_TOUCH)] = BIT_MASK(BTN_TOUCH);  
 	//tbtnDev -> evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_SYN);
 	set_bit(EV_KEY, tbtnDev->evbit);
 	set_bit(EV_SYN, tbtnDev->evbit);
+	set_bit(EV_REP, tbtnDev->evbit);
 
 	
 	for(i = 0; i < ARRAY_SIZE(hotkey_matrix); i++) {
@@ -1018,7 +983,6 @@ static int adv_vpm_probe(struct i2c_client *client, const struct i2c_device_id *
 #endif
 
 	RegisterVPMEventFunc(VPM_ByPass_EVENT, vpm_bypass_event_handler_func);
-
 
 	vpm_get_version();
 
