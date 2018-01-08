@@ -886,7 +886,6 @@ static int adv_vpm_probe(struct i2c_client *client, const struct i2c_device_id *
 	set_bit(EV_KEY, tbtnDev->evbit);
 	set_bit(EV_SYN, tbtnDev->evbit);
 	set_bit(EV_REP, tbtnDev->evbit);
-
 	
 	for(i = 0; i < ARRAY_SIZE(hotkey_matrix); i++) {
 		__set_bit(hotkey_matrix[i], tbtnDev->keybit);
@@ -895,6 +894,11 @@ static int adv_vpm_probe(struct i2c_client *client, const struct i2c_device_id *
 	}
 
 	err = input_register_device(tbtnDev);
+	
+	tbtnDev->rep[REP_DELAY] = 10;   /* input layer default: 250 */
+	tbtnDev->rep[REP_PERIOD] = 10; /* input layer default: 33 */
+		
+		
 	if(err) {
 		err("failed to register device.\n");
 		printk("vpm failed to register device.\n");
