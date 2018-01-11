@@ -12,7 +12,6 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/hrtimer.h>
-//#include <linux/notifier.h>
 #include <linux/reboot.h>
 
 struct battery_vpm_info {
@@ -97,7 +96,7 @@ static enum power_supply_property battery_vpm_properties[] = {
 
 
 
-struct battery_vpm_info *battery_vpm_device;
+//struct battery_vpm_info *battery_vpm_device;
 
 static int battery_vpm_read_command(int vpm_cmd)
 {
@@ -152,7 +151,7 @@ static int battery_vpm_get_present(union power_supply_propval *val)
 	
 	//printk("battery_vpm_get_present: 0x%4X\n",ret);
 	
-	ret = ret && 0x00FF;
+	ret = ret & 0x00FF;
 
 	if (ret < 0)
 		return ret;
@@ -166,6 +165,23 @@ static int battery_vpm_get_present(union power_supply_propval *val)
 	}
 
 	return 0;
+}
+
+static int battery_vpm_get_charged_bit(union power_supply_propval *val)
+{
+	s32 ret = 0;
+	
+	ret = battery_vpmread(VPM_BATTERY_PACK_FLAGS);
+	printk("1. battery_vpm_get_status: 0x%4X\n",ret);
+	
+	ret = ret & 0x0020 ;
+	printk("2. battery_vpm_get_status: 0x%4X\n",ret);
+
+	if (ret < 0)
+		return ret;
+	
+	val->intval = ret;
+	
 }
 
 static void  battery_vpm_unit_adjustment(
@@ -289,6 +305,7 @@ static int battery_vpm_get_property(struct power_supply *psy,
 {
 	int count;
 	int ret;
+	union power_supply_propval val_check;
 	
 	switch (psp) {
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
@@ -323,6 +340,22 @@ static int battery_vpm_get_property(struct power_supply *psy,
 		}
 
 		ret = battery_vpm_get_battery_property(count, psp, val);
+		
+		// *** Double check full charged -> CAPACITY=100%
+		if (psp == POWER_SUPPLY_PROP_CAPACITY)
+		{	
+			battery_vpm_get_charged_bit(&val_check);
+			//printk("cap = %d, status = %d\n", val->intval, val_check.intval );
+			
+			if(val_check.intval)
+			{
+				val->intval = 100; 
+				return 0;
+			}
+		}
+		// ***
+		
+		
 		if (ret)
 			return ret;
 
@@ -405,7 +438,7 @@ static int battery_vpm_remove(struct platform_device *pdev)
 	power_supply_unregister(data->psy);
 	
 	kfree(data);
-	battery_vpm_device = NULL;
+//	battery_vpm_device = NULL;
 	return 0;
 }
 /*

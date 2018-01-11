@@ -114,7 +114,7 @@ static DEFINE_MUTEX(vpm_pack_mutex);
 #define VPM_24V_SYSTEM_POST_BOOT_VOLTAGE_VALUE_L								0x75    //adv_vpm_comm_0626
 #define VPM_CAR_POWER_VOLTAGE_LOW_PROTECTION_LOAD_D4							0x76    //adv_vpm_comm_0626
 
-
+#define VPM_BATTERY_PACK_FLAGS													0x92 
 #define VPM_BATTERY_PACK_STATE_OF_CHARGE										0x9F 
 #define VPM_BATTERY_PACK_TIME_TO_EMPTY_H										0x82
 #define VPM_BATTERY_PACK_TIME_TO_EMPTY_L										0x83
@@ -294,7 +294,6 @@ extern int adv_vpm_read_poweroff_source(void);
 extern int vpm_get_version(void);
 extern int vpm_is_bootloader_mode(void);
 #endif
-
 struct battery_vpm_pinfo {
 	/*
 	 * GPIOs
