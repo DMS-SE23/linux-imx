@@ -72,7 +72,7 @@ static int sgtl5000_notifier_notify_shutdown(struct notifier_block *this,
 		printk("[Cifese] turn off amp and pwr"); 
 		gpio_direction_output(amp_mute_gpios, 1);
 		mdelay(100);
-        gpio_direction_output(amp_pwr_en_gpios, 1);
+        gpio_direction_output(amp_pwr_en_gpios, 0);
     }
     return NOTIFY_DONE;  
 } 
@@ -111,7 +111,7 @@ static int imx_sgtl5000_probe(struct platform_device *pdev)
 	if(ret)
 		printk("[Cifese] request gpio amp_mute_gpios fail\n");
 	else
-		gpio_direction_output(amp_mute_gpios, 0);
+		gpio_direction_output(amp_mute_gpios, 1);
 	
 	ret = gpio_request(amp_pwr_en_gpios, "amp power enable gpios");
 	if(ret)
