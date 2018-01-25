@@ -206,7 +206,7 @@ struct tsl2563_chip {
 	int			threshold_range;
 	int			lux;
 	int			last_lux;
-	bool			first_event;
+	bool		first_event;
 #endif
 	u8			intr;
 	bool		int_enabled;

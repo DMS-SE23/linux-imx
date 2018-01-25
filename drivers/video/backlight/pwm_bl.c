@@ -142,8 +142,6 @@ static int pwm_backlight_check_fb_name(struct device *dev, struct fb_info *info)
 	return false;
 }
 
-#define CONFIG_SENSORS_ADV_AUTOBL    1
-
 static int pwm_backlight_parse_dt(struct device *dev,
 				  struct platform_pwm_backlight_data *data)
 {
@@ -153,10 +151,6 @@ static int pwm_backlight_parse_dt(struct device *dev,
 	u32 value;
 	int ret;
 	const char *names;
-#ifdef CONFIG_SENSORS_ADV_AUTOBL
-	unsigned int i;
-	size_t size;
-#endif
 	if (!node)
 		return -ENODEV;
 
@@ -170,23 +164,7 @@ static int pwm_backlight_parse_dt(struct device *dev,
 	data->max_brightness = length / sizeof(u32);
 
 	/* read brightness levels from DT property */
-#ifdef CONFIG_SENSORS_ADV_AUTOBL
-	if(data->max_brightness > 0) {
-		value = 255;
-		data->max_brightness = 256;//0~255
-		size = sizeof(*data->levels) * data->max_brightness;
-		data->levels = devm_kzalloc(dev, size, GFP_KERNEL);
-		if (!data->levels) {
-			ret = -1;
-			return ret;
-		}
-		for (i = 0; i < data->max_brightness; i++) {
-			data->levels[i]=i;
-		}
-		data->max_brightness = value;
-		data->dft_brightness = data->max_brightness;
-	}
-#else
+
 	if (data->max_brightness > 0) {
 		size_t size = sizeof(*data->levels) * data->max_brightness;
 
@@ -208,7 +186,6 @@ static int pwm_backlight_parse_dt(struct device *dev,
 		data->dft_brightness = value;
 		data->max_brightness--;
 	}
-#endif
 
 	if (!of_property_read_string(node, "fb-names", &names)){
 		strcpy(data->fb_id, names);
