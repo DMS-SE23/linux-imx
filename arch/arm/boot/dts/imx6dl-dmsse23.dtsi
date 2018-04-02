@@ -236,9 +236,9 @@
 	pinctrl-0 = <&pinctrl_i2c1>;
 	status = "okay";
 	
-	adv_vpm: adv_vpm@78 {
+	adv_vpm: adv_vpm@68 {
 		compatible = "adv_vpm";
-		reg = <0x78>;
+		reg = <0x68>;
 		interrupt-parent = <&gpio1>;
 		interrupts = <20 1>;
 		int-gpios = <&gpio1 20 0>;
