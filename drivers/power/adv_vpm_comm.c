@@ -370,6 +370,26 @@ int vpm_get_interrupt_status(void)
 	return (int)(tp.data[0]);
 }
 
+int vpm_get_current_sense(void)
+{
+	struct adv_vpm_data tp = {0};
+	
+	tp.wlen = 2;
+	tp.rlen = 2;
+	tp.data[0] = VPM_GET_BACKLIGHT_CURRENT_SENSE;
+	tp.data[1] = VPM_GET_BACKLIGHT_CURRENT_SENSE;
+	adv_vpm_tf(&tp);
+	
+	int shift_data = 0;
+	
+	shift_data = tp.data[0];
+	shift_data = (shift_data << 8) + tp.data[1];
+	
+	//printk("VPM Current Sense: %d\n", shift_data);
+	
+	return shift_data;
+}
+
 
 
 
@@ -662,11 +682,23 @@ static ssize_t adv_vpm_vpmintmode_read(struct device *dev, struct device_attribu
 	return sprintf(buf, "%d\n", onoff);
 }
 
+static ssize_t adv_vpm_curr_sense_read(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
+{
+	int current_sense = -1;
+
+	current_sense = vpm_get_current_sense();
+
+	return sprintf(buf, "%d\n", current_sense);
+}
+
 
 static DEVICE_ATTR(vpmintmode, S_IRUGO | S_IWUSR, adv_vpm_vpmintmode_read, adv_vpm_vpmintmode_write); // Enable/Disable VPM Interrupt
+static DEVICE_ATTR(vpmbl_curr_sense, S_IRUGO, adv_vpm_curr_sense_read, NULL); // Read backlight current sense
+
 
 static struct attribute *adv_vpm_attrs[] = {
 	&dev_attr_vpmintmode.attr,
+	&dev_attr_vpmbl_curr_sense.attr,
 	NULL
 };
 

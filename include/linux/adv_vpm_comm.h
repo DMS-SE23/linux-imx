@@ -63,7 +63,7 @@ static DEFINE_MUTEX(vpm_pack_mutex);
 #define VPM_EEPROM_DEFAULT														0x30	//adv_vpm_comm_0626
 #define VPM_GET_INTERRUPT_STATUS												0x37
 #define VPM_SET_INTERRUPT_STATUS												0x38
-#define VPM_LCD_BACKLIGHT_BRIGHTNESS											0x40
+#define VPM_GET_BACKLIGHT_CURRENT_SENSE											0x40
 #define VPM_KEY_PAD_BACK_LIGHT_CONTROL_NO										0x41
 #define VPM_KEY_PAD_BACK_LIGHT_BRIGHTNESS										0x42
 #define VPM_LCD_BACKLIGHT_CTRL													0x43
