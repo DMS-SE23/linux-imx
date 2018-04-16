@@ -172,10 +172,9 @@ static int battery_vpm_get_charged_bit(union power_supply_propval *val)
 	s32 ret = 0;
 	
 	ret = battery_vpmread(VPM_BATTERY_PACK_FLAGS);
-	printk("1. battery_vpm_get_status: 0x%4X\n",ret);
-	
+	//printk("1. battery_vpm_get_status: 0x%4X\n",ret)
 	ret = ret & 0x0020 ;
-	printk("2. battery_vpm_get_status: 0x%4X\n",ret);
+	//printk("2. battery_vpm_get_status: 0x%4X\n",ret);
 
 	if (ret < 0)
 		return ret;
