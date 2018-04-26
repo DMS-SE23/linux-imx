@@ -73,6 +73,7 @@ static ssize_t power_supply_show_property(struct device *dev,
 	const ptrdiff_t off = attr - power_supply_attrs;
 	union power_supply_propval value;
 
+
 	if (off == POWER_SUPPLY_PROP_TYPE) {
 		value.intval = psy->desc->type;
 	} else {
@@ -88,23 +89,29 @@ static ssize_t power_supply_show_property(struct device *dev,
 			return ret;
 		}
 	}
+	
+	
 
 	if (off == POWER_SUPPLY_PROP_STATUS)
 		return sprintf(buf, "%s\n", status_text[value.intval]);
 	else if ((off == POWER_SUPPLY_PROP_CAPACITY) || (off == POWER_SUPPLY_PROP_VOLTAGE_NOW) || \
 			(off == POWER_SUPPLY_PROP_CURRENT_NOW) || (off == POWER_SUPPLY_PROP_TEMP) || \
-			(off == POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG) || (off == POWER_SUPPLY_PROP_TIME_TO_FULL_AVG))
+			(off == POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG) || (off == POWER_SUPPLY_PROP_TIME_TO_FULL_AVG) || \
+			(off == POWER_SUPPLY_PROP_HEALTH) || (off == POWER_SUPPLY_PROP_CHARGE_FULL) || \
+			(off == POWER_SUPPLY_PROP_MODEL_NAME) || (off == POWER_SUPPLY_PROP_SERIAL_NUMBER) || \
+			(off == POWER_SUPPLY_PROP_MANUFACTURER) || (off == POWER_SUPPLY_PROP_CYCLE_COUNT))
 		{
 			if(value.intval == 0xFFFFF)
 				return sprintf(buf, "%s\n", "Unknown");
 			else
-			    return sprintf(buf, "%d\n", value.intval);
-
+			{
+				if (off >= POWER_SUPPLY_PROP_MODEL_NAME)
+						return sprintf(buf, "%s\n", value.strval);
+				return sprintf(buf, "%d\n", value.intval);
+			}
 		}
 	else if (off == POWER_SUPPLY_PROP_CHARGE_TYPE)
 		return sprintf(buf, "%s\n", charge_type[value.intval]);
-	else if (off == POWER_SUPPLY_PROP_HEALTH)
-		return sprintf(buf, "%s\n", health_text[value.intval]);
 	else if (off == POWER_SUPPLY_PROP_TECHNOLOGY)
 		return sprintf(buf, "%s\n", technology_text[value.intval]);
 	else if (off == POWER_SUPPLY_PROP_CAPACITY_LEVEL)
@@ -113,9 +120,6 @@ static ssize_t power_supply_show_property(struct device *dev,
 		return sprintf(buf, "%s\n", type_text[value.intval]);
 	else if (off == POWER_SUPPLY_PROP_SCOPE)
 		return sprintf(buf, "%s\n", scope_text[value.intval]);
-	else if (off >= POWER_SUPPLY_PROP_MODEL_NAME)
-		return sprintf(buf, "%s\n", value.strval);
-
 	return sprintf(buf, "%d\n", value.intval);
 }
 

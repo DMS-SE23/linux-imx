@@ -246,7 +246,7 @@ int adv_i2c_tf(struct adv_vpm_data *tf_data)
 
 	
 	if(tf_data->rlen > 0) {
-		msleep(10);
+		msleep(20);
 		xfer.addr = client_vpm->addr;
 		xfer.flags = I2C_M_RD;
 		xfer.len = tf_data->rlen;
