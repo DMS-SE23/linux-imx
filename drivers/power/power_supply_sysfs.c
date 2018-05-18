@@ -103,13 +103,12 @@ static ssize_t power_supply_show_property(struct device *dev,
 		{
 			if(value.intval == 0xFFFFF)
 				return sprintf(buf, "%s\n", "Unknown");
-			else
-			{
-				if (off >= POWER_SUPPLY_PROP_MODEL_NAME)
+			else if (off >= POWER_SUPPLY_PROP_MODEL_NAME)
 						return sprintf(buf, "%s\n", value.strval);
 				return sprintf(buf, "%d\n", value.intval);
-			}
 		}
+	else if (off == POWER_SUPPLY_PROP_FLAGS)
+		return sprintf(buf, "%s\n", value.strval);
 	else if (off == POWER_SUPPLY_PROP_CHARGE_TYPE)
 		return sprintf(buf, "%s\n", charge_type[value.intval]);
 	else if (off == POWER_SUPPLY_PROP_TECHNOLOGY)
@@ -149,6 +148,7 @@ static ssize_t power_supply_store_property(struct device *dev,
 /* Must be in the same order as POWER_SUPPLY_PROP_* */
 static struct device_attribute power_supply_attrs[] = {
 	/* Properties of type `int' */
+	POWER_SUPPLY_ATTR(flags),
 	POWER_SUPPLY_ATTR(status),
 	POWER_SUPPLY_ATTR(charge_type),
 	POWER_SUPPLY_ATTR(health),

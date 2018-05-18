@@ -6,8 +6,9 @@
 //event class supported
 //define 1 => support this event, define 0 => not support.
 #define VPM_POWER_SOURCE_EVENT_SUPPORTED										1
-#define VPM_CAR_POWER_EVENT_SUPPORTED											1
-#define VPM_BATTERY_EVENT_SUPPORTED												1
+#define VPM_CAR_POWER_EVENT_SUPPORTED											0
+#define VPM_BATTERY_EVENT_SUPPORTED												0
+#define VPM_AC_POWER_EVENT_SUPPORTED											1
 #define VPM_GPI_DI_EVENT_SUPPORTED												1
 #define VPM_CRADLE_EVENT_SUPPORTED												0
 #define VPM_KEYPAD_EVENT_SUPPORTED												1
@@ -222,6 +223,34 @@ static DEFINE_MUTEX(vpm_pack_mutex);
 #define VPM_I2C_INTERRUPT_DISABLE 0x00
 #define VPM_I2C_INTERRUPT_ENABLE  0x01
 
+typedef enum
+{
+	Battery_Err0 = 0,					//0
+	Battery_Err1,						//1
+	Battery_Err2,						//2
+	Battery_Err3,						//3
+	Battery_Fully_Discharged,			//4
+	Battery_Fully_Charged,				//5
+	Battery_Discharging_Relax,			//6
+	Battery_Initialization,				//7
+	Battery_Remaining_Time_Alarm,		//8
+	Battery_Remaining_Capacity_Alarm,	//9
+	Battery_Undefined1,					//10
+	Battery_Terminate_Discharge_Alarm,	//11
+	Battery_Overtemperature_Alarm,		//12
+	Battery_Undefined2,					//13
+	Battery_Terminate_Charge_Alarm,		//14
+	Battery_Overcharged_Alarm			//15
+} enum_battery_error_flag;
+typedef enum
+{
+	Battery_Err_Unknown = 0,			//0
+	Battery_Err_Unspecified_Fail,		//1
+	Battery_Err_Over_Voltage,			//2
+	Battery_Err_Over_Heat,				//3
+	Battery_Err_Dead,					//4
+	Battery_Err_Total					//5
+} enum_battery_error_flag_report;
 
 struct adv_vpm_data {
 	int wlen;

@@ -37,18 +37,19 @@ typedef struct {
 enum {
 	VPM_CAPACITY,
 	VPM_TIME_TO_EMPTY,
+	VPM_FLAGS,
 	VPM_TIME_TO_FULL,
 	VPM_HEALTH,
+	VPM_CHARGE_NOW,
 	VPM_FULL_CHARGE_FULL,
 	VPM_DEVICE_NAME,
 	VPM_SERIAL_NUMBER,
 	VPM_MANUFACTURER_NAME,
 	VPM_CYCLE_COUNT,
-	VPM_FLAGS,
+	VPM_STATUS,
 	VPM_TEMPERATURE,
 	VPM_VOLTAGE,
 	VPM_CURRENT,
-	VPM_CHARGE_NOW,
 };
 
 #define POLL_INTERVAL			30
@@ -80,6 +81,7 @@ static const struct battery_vpm_device_data {
 } battery_vpm_data[] = {
 	[VPM_CAPACITY] =				BATTERY_VPM_DATA(POWER_SUPPLY_PROP_CAPACITY, 0x90, 0, 100, 3), //0x1:Primary, 0x2: Secondary
 	[VPM_TIME_TO_EMPTY] =			BATTERY_VPM_DATA(POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG, 0x91, 0, 65535, 3), //min.
+	[VPM_FLAGS] =			        BATTERY_VPM_DATA(POWER_SUPPLY_PROP_FLAGS, 0x92, 0, 65535, 3),
 	[VPM_TIME_TO_FULL] =			BATTERY_VPM_DATA(POWER_SUPPLY_PROP_TIME_TO_FULL_AVG, 0x96, 0, 65535, 3), //min.
 	[VPM_HEALTH] =					BATTERY_VPM_DATA(POWER_SUPPLY_PROP_HEALTH, 0x97, 0, 100, 3), 
 	[VPM_CHARGE_NOW] =			    BATTERY_VPM_DATA(POWER_SUPPLY_PROP_CHARGE_NOW, 0x98, 0, 65536, 3), 
@@ -88,7 +90,7 @@ static const struct battery_vpm_device_data {
 	[VPM_SERIAL_NUMBER] =	        BATTERY_VPM_DATA(POWER_SUPPLY_PROP_SERIAL_NUMBER, 0x9B, 0, 65536, 3), 
 	[VPM_MANUFACTURER_NAME] =	    BATTERY_VPM_DATA(POWER_SUPPLY_PROP_MANUFACTURER, 0x9C, 0, 65536, 20), 
 	[VPM_CYCLE_COUNT] = 			BATTERY_VPM_DATA(POWER_SUPPLY_PROP_CYCLE_COUNT, 0x9D, 0, 65535, 3),
-	[VPM_FLAGS] =					BATTERY_VPM_DATA(POWER_SUPPLY_PROP_STATUS, 0x9F, 0, 65535, 3), 
+	[VPM_STATUS] =					BATTERY_VPM_DATA(POWER_SUPPLY_PROP_STATUS, 0x9F, 0, 65535, 3), 
 	[VPM_TEMPERATURE] =				BATTERY_VPM_DATA(POWER_SUPPLY_PROP_TEMP, 0x93, 0, 65535, 3), //0.1K C=K-237.15
 	[VPM_VOLTAGE] =					BATTERY_VPM_DATA(POWER_SUPPLY_PROP_VOLTAGE_NOW, 0x94, 0, 65535, 3), //mV
 	[VPM_CURRENT] = 			    BATTERY_VPM_DATA(POWER_SUPPLY_PROP_CURRENT_NOW, 0x95, -32768, 32767, 3),//mA
@@ -100,6 +102,7 @@ static enum power_supply_property vpm_charger_properties[] = {
 
 
 static enum power_supply_property battery_vpm_properties[] = {
+	POWER_SUPPLY_PROP_FLAGS,
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CAPACITY,
@@ -209,9 +212,117 @@ static int battery_vpm_get_charged_bit(union power_supply_propval *val)
 
 	if (ret < 0)
 		return ret;
-	
+
 	val->intval = ret;
-	
+}
+
+static int battery_vpm_get_time_to_empty(union power_supply_propval *val)
+{
+	int ret = 0, state = 0;
+	s32 Remain_capacity = 0, Current = 0;
+	struct adv_vpm_data vpm_data;
+
+	vpm_data.wlen = 2;
+	vpm_data.rlen = 3;
+	vpm_data.data[0] = VPM_BATTERY_PACK_STATE_OF_CHARGE;
+	vpm_data.data[1] = VPM_BATTERY_PACK_STATE_OF_CHARGE;
+
+	ret = battery_vpm_read_command(&vpm_data);
+
+	state = ret & 0x0F;
+
+	if (state != 0x03)  //AC-IN mode
+		val->intval = 65535;
+	else
+	{
+		vpm_data.wlen = 2;
+		vpm_data.rlen = battery_vpm_data[VPM_CHARGE_NOW].i2c_length;
+		vpm_data.data[0] = battery_vpm_data[VPM_CHARGE_NOW].addr;
+		vpm_data.data[1] = battery_vpm_data[VPM_CHARGE_NOW].addr;
+
+		Remain_capacity = battery_vpm_read_command(&vpm_data);
+		//printk("Remain_capacity: %d\n", Remain_capacity);
+
+		vpm_data.wlen = 2;
+		vpm_data.rlen = battery_vpm_data[VPM_CURRENT].i2c_length;
+		vpm_data.data[0] = battery_vpm_data[VPM_CURRENT].addr;
+		vpm_data.data[1] = battery_vpm_data[VPM_CURRENT].addr;
+
+		Current = battery_vpm_read_command(&vpm_data);
+
+		if (battery_vpm_data[VPM_CURRENT].min_value < 0)
+			Current = (s16)Current;
+
+		//printk("Current: %d\n", Current);
+
+		Current = (Current > 0)? Current : Current*(-1);
+
+		ret = (int)Remain_capacity * 60 / Current;
+
+		if (ret < 0)
+			return ret;
+		val->intval = ret;
+	}
+}
+/*
+Error Report
+bit0: Unknown
+bit1: Unspecified failure
+bit2: Over-charged
+bit3: Over-temperature
+bit4: Dead
+*/
+static void battery_vpm_error_bit(s32 error_flag, union power_supply_propval *val)
+{
+	int i, j = 0;
+	static char adv_char[16] = {0}, adv_flag[8] = {0}, adv_flag_report[8] = {0};
+	char *ap = adv_char, *ap_report = adv_flag_report;
+	union power_supply_propval val_check;
+
+	//printk("battery_vpm_error_bit: %d\n", error_flag);
+
+	for( i = 0; i < Battery_Err_Total; i++)// Clean error status
+		adv_flag[i] = 0;
+
+	battery_vpm_get_present(&val_check);
+	if(! val_check.intval) // error report : battery unplug-in
+			adv_flag[Battery_Err_Unknown] = 1;
+	else
+	{
+		for(i = 32768; i ; i >>= 1 )
+		{
+			//printk("%d-%d ",i, (error_flag&i)?1:0);
+			adv_char[j++] = (error_flag&i)?1:0;
+			if(error_flag&i)
+			{
+				//printk("bit=%d\n", (16-j));
+				switch (16-j) {
+					case Battery_Err0:
+					case Battery_Err1:
+					case Battery_Err2:
+					case Battery_Err3:
+						adv_flag[Battery_Err_Unknown] = 1;
+						break;
+					case Battery_Overtemperature_Alarm:
+						adv_flag[Battery_Err_Over_Heat] = 1;
+						break;
+					case Battery_Overcharged_Alarm:
+						adv_flag[Battery_Err_Over_Voltage] = 1;
+						break;
+					case Battery_Terminate_Discharge_Alarm:
+					case Battery_Terminate_Charge_Alarm:
+						adv_flag[Battery_Err_Unspecified_Fail] = 1;
+						break;
+				}
+			}
+		}
+	}
+
+	for( i = 1; i <= Battery_Err_Total; i++)
+		ap_report += sprintf(ap_report, "%d", adv_flag[Battery_Err_Total-i]);
+
+	val->strval = adv_flag_report;
+
 }
 
 static void  battery_vpm_unit_adjustment(
@@ -278,6 +389,9 @@ static int battery_vpm_get_battery_property(
 		
 		battery_vpm_unit_adjustment(psp, val);
 		switch (psp) {
+			case POWER_SUPPLY_PROP_FLAGS:
+				battery_vpm_error_bit(ret, val);
+				break;
 			case POWER_SUPPLY_PROP_STATUS:
 				ret = ret >> 8;
 				switch (ret) {
@@ -384,6 +498,7 @@ static int battery_vpm_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_MANUFACTURER:
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
+	case POWER_SUPPLY_PROP_FLAGS:
 	
 	if ((psp == POWER_SUPPLY_PROP_CAPACITY) || (psp == POWER_SUPPLY_PROP_VOLTAGE_NOW) || \
 			(psp == POWER_SUPPLY_PROP_CURRENT_NOW) || (psp == POWER_SUPPLY_PROP_TEMP) || \
@@ -408,25 +523,25 @@ static int battery_vpm_get_property(struct power_supply *psy,
 
 		ret = battery_vpm_get_battery_property(count, psp, val);
 		
-		// *** Double check full charged -> CAPACITY=100%
-		if (psp == POWER_SUPPLY_PROP_CAPACITY)
-		{	
+		switch (psp) {
+		case POWER_SUPPLY_PROP_CAPACITY:
+			// *** Double check full charged -> CAPACITY=100%
 			battery_vpm_get_charged_bit(&val_check);
 			//printk("cap = %d, status = %d\n", val->intval, val_check.intval );
-			
 			if(val_check.intval)
 			{
-				val->intval = 100; 
+				val->intval = 100;
 				return 0;
 			}
+			break;
+		case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
+			battery_vpm_get_time_to_empty(val);
+			break;
 		}
-		// ***
-		
 		if (ret)
 			return ret;
 
 		break;
-
 	default:
 		printk(KERN_ERR "%s: INVALID property\n", __func__);
 		return -EINVAL;
