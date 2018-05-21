@@ -43,6 +43,7 @@ struct m25p {
 #define M25P80_CONFIG_STRING_LENGTH    128
 #define M25P80_CONFIG_PAGE_SIZE        0x100
 #define M25P80_CONFIG_MAC_SIZE         6
+#define M25P80_CONFIG_HOTKEY_SIZE      10
 
 
 /* ================================================================ *
@@ -327,6 +328,81 @@ static int m25p80_config_control(const char *name, char *srcbuf, bool write)
 	return 0;	
 }
 
+//=============================================================//
+// boardcfg read/write function
+//=============================================================//
+int m25p80_get_config(const char* name, char *buf)
+{
+	struct mtd_info *mtd = get_mtd_device_nm("config");
+	
+	int retlen = 0, index = 0, cfglen = 0;
+	int size = boardcfg.cfg_size;
+	char *buffer = boardcfg.cfg_buf;
+	char *bufptr = NULL;
+	char dstbuf[M25P80_CONFIG_STRING_LENGTH] = {0};
+
+	memset(dstbuf, 0x0, sizeof(dstbuf));
+	
+	mtd->_read(mtd, 0x0, size, &retlen, buffer);
+
+	index = m25p80_find_config(name);
+
+	bufptr = buffer + (M25P80_CONFIG_STRING_LENGTH * index);
+
+	if(strstr(name, "_mac") != NULL)
+	{
+		cfglen = (M25P80_CONFIG_MAC_SIZE * 3) - 1; //MAC addr length
+
+		sprintf(dstbuf, "%02x:%02x:%02x:%02x:%02x:%02x",
+					bufptr[0], bufptr[1], bufptr[2], bufptr[3], bufptr[4], bufptr[5]);
+	}
+	else if(strstr(name, "hotkey") != NULL)
+	{
+		cfglen = M25P80_CONFIG_HOTKEY_SIZE;
+
+		memcpy(dstbuf, bufptr, cfglen);
+	}
+	else
+	{
+		cfglen = strlen(bufptr);
+		
+		strcpy(dstbuf, bufptr);		
+	}
+
+	memcpy(buf, dstbuf, cfglen);
+
+	return 0;	
+}
+EXPORT_SYMBOL(m25p80_get_config);
+
+int m25p80_set_config(const char* name, char *buf)
+{
+	int ret;
+	char *pch = NULL;
+	char srcbuf[M25P80_CONFIG_STRING_LENGTH] = {0};
+	
+	memset(srcbuf, 0x0, sizeof(srcbuf));
+	
+	pch = strstr(name, "_mac");
+	if(strstr(name, "_mac") != NULL)
+	{
+		sscanf(buf, "%02x:%02x:%02x:%02x:%02x:%02x",
+			(unsigned int *)&srcbuf[0], (unsigned int *)&srcbuf[1], (unsigned int *)&srcbuf[2],
+			(unsigned int *)&srcbuf[3], (unsigned int *)&srcbuf[4], (unsigned int *)&srcbuf[5]);
+	}
+	else if(strstr(name, "hotkey") != NULL)
+		memcpy(srcbuf, buf, M25P80_CONFIG_HOTKEY_SIZE);
+	else
+		memcpy(srcbuf, buf, strlen(buf));
+
+	ret = m25p80_config_control(name, srcbuf, 1);
+	if (ret < 0)
+		pr_err("[%s] invalid board config item\n", __func__);
+	
+	return 0;	
+}
+EXPORT_SYMBOL(m25p80_set_config);
+//=============================================================//
 
 static int m25p80_board_config_init(struct device *dev)
 {
