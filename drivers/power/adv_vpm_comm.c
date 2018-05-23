@@ -385,6 +385,7 @@ int vpm_get_current_sense(void)
 	shift_data = tp.data[0];
 	shift_data = (shift_data << 8) + tp.data[1];
 	
+	shift_data = (shift_data * 3300)/8192;
 	//printk("VPM Current Sense: %d\n", shift_data);
 	
 	return shift_data;
