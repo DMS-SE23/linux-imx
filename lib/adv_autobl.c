@@ -86,7 +86,7 @@ exit:
 }
 EXPORT_SYMBOL(adv_set_brightness);
 
-int adv_parse_levels(int bl_levels[LEVELS_ARRAY_SIZE][2],char *str ,int *levels_size)
+int adv_parser_levels(int bl_levels[LEVELS_ARRAY_SIZE][2],char *str ,int *levels_size)
 {
 	int temp_size = 0, temp_lux = 0, temp_bl = 0, temp_value = 0;
 	int temp_levels[LEVELS_ARRAY_SIZE][2];
@@ -113,9 +113,9 @@ int adv_parse_levels(int bl_levels[LEVELS_ARRAY_SIZE][2],char *str ,int *levels_
 	*levels_size = temp_size;
 	return 0;
 }
-EXPORT_SYMBOL(adv_parse_levels);
+EXPORT_SYMBOL(adv_parser_levels);
 
-void adv_get_levels(int bl_levels[LEVELS_ARRAY_SIZE][2] ,char *path,int *levels_size)
+int adv_get_levels(int bl_levels[LEVELS_ARRAY_SIZE][2] ,char *path,int *levels_size)
 {
 	int ret = 0, fd = 0, buff_size = LEVELS_ARRAY_SIZE*2*8;
 	char Buff[buff_size];
@@ -131,11 +131,13 @@ void adv_get_levels(int bl_levels[LEVELS_ARRAY_SIZE][2] ,char *path,int *levels_
 		goto error;
 	}
 	set_fs(old_fs);
-	ret = adv_parse_levels(bl_levels,Buff,levels_size);
+	ret = adv_parser_levels(bl_levels,Buff,levels_size);
 	if(ret == 0){
 		printk( "levels table update\n");
+		return 0;
 	}else {
 		printk( "wrong levels table\n");
+		return -1;
 	}
 	return;
 error:

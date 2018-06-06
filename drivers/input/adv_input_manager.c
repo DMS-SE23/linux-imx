@@ -219,7 +219,7 @@ static ssize_t light_levels_write(struct file *file, const char __user *buf,
 		return -EFAULT;
 
 	str[count] = 0;
-	ret = adv_parse_levels(adv_bl_levels, str, &adv_levels_size);
+	ret = adv_parser_levels(adv_bl_levels, str, &adv_levels_size);
 	if(ret == 0){
 		printk( "levels table update\n");
 	}else {
@@ -254,10 +254,20 @@ static void light_setting_config(struct work_struct *work)
 	if(ret > 0)
 		adv_lux200 = ret;
 	adv_get_file_value(&ret,CONTROL_BL_PATH);
-	if(ret == 0 || ret == 0)
+	if(ret == 0 || ret == 1)
 		control_bl = ret;
-	adv_get_levels(adv_bl_levels,THRES_LEVELS_PATH,&adv_levels_size);
-
+	ret = adv_get_levels(adv_bl_levels,THRES_LEVELS_PATH,&adv_levels_size);
+	if(ret==-1) {
+		adv_bl_levels[0][0]=100;
+		adv_bl_levels[0][1]=50;
+		adv_bl_levels[1][0]=200;
+		adv_bl_levels[1][1]=100;
+		adv_bl_levels[2][0]=400;
+		adv_bl_levels[2][1]=200;
+		adv_bl_levels[3][0]=800;
+		adv_bl_levels[3][1]=250;
+		adv_levels_size=4;
+	}
 	//symlink for driver/iio/light/tsl2563
 	set_fs(KERNEL_DS);
 	fd = sys_open("/sys/devices/soc0/soc/2100000.aips-bus/21a8000.i2c/i2c-2/2-0029/iio:device0/events", O_RDONLY, 0);

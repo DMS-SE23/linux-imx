@@ -11,6 +11,6 @@
 
 extern void adv_get_file_value(int *data,char *path);
 extern void adv_set_brightness(int levels[LEVELS_ARRAY_SIZE][2],int lux,char *path,int *levels_size);
-extern int adv_parse_levels(int levels[LEVELS_ARRAY_SIZE][2],char *str,int *levels_size);
-extern void adv_get_levels(int levels[LEVELS_ARRAY_SIZE][2],char *path,int *levels_size);
+extern int adv_parser_levels(int levels[LEVELS_ARRAY_SIZE][2],char *str,int *levels_size);
+extern int adv_get_levels(int levels[LEVELS_ARRAY_SIZE][2],char *path,int *levels_size);
 
