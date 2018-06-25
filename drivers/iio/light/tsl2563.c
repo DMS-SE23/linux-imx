@@ -49,7 +49,8 @@
 #define CONFIG_SENSORS_ADV_AUTOBL    1
 #ifdef CONFIG_SENSORS_ADV_AUTOBL
 #include <linux/adv_autobl.h>
-#define DEFAULT_THRES_RANGE  50
+#define DEFAULT_THRES_RANGE  10
+#define DEBUG_F 0
 #endif
 
 /* Use this many bits for fraction part. */
@@ -229,7 +230,7 @@ static int tsl2563_set_power(struct tsl2563_chip *chip, int on)
 {
 	struct i2c_client *client = chip->client;
 	u8 cmd;
-
+	if(DEBUG_F)	printk("tsl2563_set_power");
 	cmd = on ? TSL2563_CMD_POWER_ON : TSL2563_CMD_POWER_OFF;
 	return i2c_smbus_write_byte_data(client,
 					 TSL2563_CMD | TSL2563_REG_CTRL, cmd);
@@ -243,7 +244,7 @@ static int tsl2563_get_power(struct tsl2563_chip *chip)
 {
 	struct i2c_client *client = chip->client;
 	int ret;
-
+	if(DEBUG_F)	printk("tsl2563_get_power");
 	ret = i2c_smbus_read_byte_data(client, TSL2563_CMD | TSL2563_REG_CTRL);
 	if (ret < 0)
 		return ret;
@@ -254,7 +255,7 @@ static int tsl2563_get_power(struct tsl2563_chip *chip)
 static int tsl2563_configure(struct tsl2563_chip *chip)
 {
 	int ret;
-
+	if(DEBUG_F)	printk("tsl2563_configure");
 	ret = i2c_smbus_write_byte_data(chip->client,
 			TSL2563_CMD | TSL2563_REG_TIMING,
 			chip->gainlevel->gaintime);
@@ -296,7 +297,7 @@ static void tsl2563_poweroff_work(struct work_struct *work)
 static int tsl2563_detect(struct tsl2563_chip *chip)
 {
 	int ret;
-
+	if(DEBUG_F)	printk("tsl2563_detect");
 	ret = tsl2563_set_power(chip, 1);
 	if (ret)
 		return ret;
@@ -359,7 +360,7 @@ static u32 normalize_adc(u16 adc, u8 timing)
 static void tsl2563_wait_adc(struct tsl2563_chip *chip)
 {
 	unsigned int delay;
-
+	if(DEBUG_F)	printk("tsl2563_wait_adc");
 	switch (chip->gainlevel->gaintime & TSL2563_TIMING_MASK) {
 	case TSL2563_TIMING_13MS:
 		delay = 14;
@@ -380,7 +381,7 @@ static void tsl2563_wait_adc(struct tsl2563_chip *chip)
 static int tsl2563_adjust_gainlevel(struct tsl2563_chip *chip, u16 adc)
 {
 	struct i2c_client *client = chip->client;
-
+	if(DEBUG_F)	printk("tsl2563_adjust_gainlevel");
 	if (adc > chip->gainlevel->max || adc < chip->gainlevel->min) {
 
 		(adc > chip->gainlevel->max) ?
@@ -456,7 +457,7 @@ static unsigned int adc_to_lux(u32 adc0, u32 adc1)
 {
 	const struct tsl2563_lux_coeff *lp = lux_table;
 	unsigned long ratio, lux, ch0 = adc0, ch1 = adc1;
-
+	if(DEBUG_F)	printk("adc_to_lux");
 	ratio = ch0 ? ((ch1 << ADC_FRAC_BITS) / ch0) : ULONG_MAX;
 
 	while (lp->ch_ratio < ratio)
@@ -478,7 +479,7 @@ static int tsl2563_get_adc(struct tsl2563_chip *chip)
 #endif
 	if (chip->suspended)
 		goto out;
-
+	if(DEBUG_F)	printk("tsl2563_get_adc");
 	if (!chip->int_enabled) {
 		cancel_delayed_work(&chip->poweroff_work);
 
@@ -589,7 +590,7 @@ static int tsl2563_write_raw(struct iio_dev *indio_dev,
 			       long mask)
 {
 	struct tsl2563_chip *chip = iio_priv(indio_dev);
-
+	if(DEBUG_F)	printk("tsl2563_write_raw");
 	if (mask != IIO_CHAN_INFO_CALIBSCALE)
 		return -EINVAL;
 	if (chan->channel2 == IIO_MOD_LIGHT_BOTH)
@@ -611,7 +612,7 @@ static int tsl2563_read_raw(struct iio_dev *indio_dev,
 	int ret = -EINVAL;
 	u32 calib0, calib1;
 	struct tsl2563_chip *chip = iio_priv(indio_dev);
-
+	if(DEBUG_F)	printk("tsl2563_read_raw");
 	mutex_lock(&chip->lock);
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
@@ -703,7 +704,7 @@ static int tsl2563_read_thresh(struct iio_dev *indio_dev,
 	int *val2)
 {
 	struct tsl2563_chip *chip = iio_priv(indio_dev);
-
+	if(DEBUG_F)	printk("tsl2563_read_thresh");
 	switch (dir) {
 	case IIO_EV_DIR_RISING:
 		*val = chip->high_thres;
@@ -726,7 +727,7 @@ static int tsl2563_write_thresh(struct iio_dev *indio_dev,
 	struct tsl2563_chip *chip = iio_priv(indio_dev);
 	int ret;
 	u8 address;
-
+	if(DEBUG_F)	printk("tsl2563_write_thresh");
 	if (dir == IIO_EV_DIR_RISING)
 		address = TSL2563_REG_HIGHLOW;
 	else
@@ -758,7 +759,7 @@ static irqreturn_t tsl2563_event_handler(int irq, void *private)
 	u32 calib0, calib1;
 	int lux;
 	int ret;
-
+	if(DEBUG_F)	printk("tsl2563_event_handler");
 	iio_push_event(dev_info,
 		       IIO_UNMOD_EVENT_CODE(IIO_LIGHT,
 					    0,
@@ -779,13 +780,14 @@ static irqreturn_t tsl2563_event_handler(int irq, void *private)
 				chip->cover_comp_gain;
 #ifdef CONFIG_SENSORS_ADV_AUTOBL
 	lux = adc_to_lux(calib0, calib1);
-	if(lux > 0 && chip->last_lux == lux && chip->first_event == true) {
+	if(chip->last_lux == lux && chip->first_event == true) {
 		lux++;
 	}
 #endif
 	input_report_abs(chip->input, ABS_MISC, lux);
 #ifdef CONFIG_SENSORS_ADV_AUTOBL
 	chip->last_lux = lux;
+	chip->first_event = false;
 #endif
 	input_sync(chip->input);
 
@@ -799,7 +801,7 @@ static int tsl2563_write_interrupt_config(struct iio_dev *indio_dev,
 {
 	struct tsl2563_chip *chip = iio_priv(indio_dev);
 	int ret = 0;
-
+	if(DEBUG_F)	printk("tsl2563_write_interrupt_config");
 	mutex_lock(&chip->lock);
 	if (state && !(chip->intr & 0x30)) {
 		chip->intr &= ~0x30;
@@ -832,10 +834,11 @@ static int tsl2563_write_interrupt_config(struct iio_dev *indio_dev,
 out:
 #ifdef CONFIG_SENSORS_ADV_AUTOBL
 	if(chip->int_enabled == true) {
-		msleep(400);
+		msleep(600);
 		chip->first_event = true;
 		tsl2563_event_handler(chip->client->irq, indio_dev);
-		chip->first_event = false;
+	} else if(chip->int_enabled == false) {
+		chip->last_lux = 0;
 	}
 #endif
 	mutex_unlock(&chip->lock);
@@ -849,7 +852,7 @@ static int tsl2563_read_interrupt_config(struct iio_dev *indio_dev,
 {
 	struct tsl2563_chip *chip = iio_priv(indio_dev);
 	int ret;
-
+	if(DEBUG_F)	printk("tsl2563_read_interrupt_config");
 	mutex_lock(&chip->lock);
 	ret = i2c_smbus_read_byte_data(chip->client,
 				       TSL2563_CMD | TSL2563_REG_INT);
@@ -875,6 +878,7 @@ static ssize_t tsl2563_store_threshold_range(struct device *dev,
 {
 	struct tsl2563_chip *chip = iio_priv(dev_get_drvdata(dev));
 	int ret,val;
+	if(DEBUG_F)	printk("tsl2563_store_threshold_range");
 	ret = kstrtoint(buf, 10, &val);
 	if (ret)
 		goto error_ret;
@@ -895,7 +899,7 @@ static ssize_t tsl2563_show_lux(struct device *dev,
 		char *buf)
 {
 	struct tsl2563_chip *chip = iio_priv(dev_get_drvdata(dev));
-	return sprintf(buf, "%d\n", chip->lux);
+	return sprintf(buf, "%d\n", chip->last_lux);
 }
 
 static ssize_t tsl2563_store_lux(struct device *dev,
@@ -920,6 +924,7 @@ static ssize_t tsl2563_show_dump_reg(struct device *dev,
 	struct tsl2563_chip *chip = iio_priv(dev_get_drvdata(dev));
 
 	int index, value;
+	if(DEBUG_F)	printk("tsl2563_show_dump_reg");
 	mutex_lock(&chip->lock);
 
 	for (index = 0; index < ARRAY_SIZE(tsl2563_info_table); index++) {
@@ -969,56 +974,6 @@ static const struct iio_info tsl2563_info = {
 	.attrs = &tsl2563_attribute_group,
 };
 
-#ifdef CONFIG_SENSORS_ADV_AUTOBL
-
-static int tsl2563_enable_interrupt_config(struct tsl2563_chip *chip ,
-	const struct iio_chan_spec *chan, enum iio_event_type type,
-	enum iio_event_direction dir )
-{
-	int ret = 0;
-	chip->low_thres = 0x00;
-	chip->high_thres = 0x30;
-	adv_get_file_value(&ret,THRES_RANGE_PATH);
-	if(ret > 0)
-		chip->threshold_range = ret;
-	adv_get_file_value(&ret,AUTO_BL_PATH);
-	if(ret == 0) {
-		return 0;
-	}
-	tsl2563_set_power(chip, 1);
-	mutex_lock(&chip->lock);
-
-	chip->intr &= ~0x30;
-	chip->intr |= 0x10;
-	/* ensure the chip is actually on */
-	cancel_delayed_work(&chip->poweroff_work);
-	if (!tsl2563_get_power(chip)) {
-
-		ret = tsl2563_set_power(chip, 1);
-		if (ret)
-			goto out;
-	}
-	ret = i2c_smbus_write_byte_data(chip->client,
-					TSL2563_CMD | TSL2563_REG_INT,
-					chip->intr);
-
-	ret = tsl2563_configure(chip);
-	if (ret)
-		goto out;
-	chip->int_enabled = true;
-
-out:
-	mutex_unlock(&chip->lock);
-	return ret;
-}
-
-static void tsl2563_int_enable_work(struct work_struct *work)
-{
-	struct tsl2563_chip *chip = container_of(work, struct tsl2563_chip, int_enable_work.work);
-	tsl2563_enable_interrupt_config(chip, tsl2563_channels, IIO_EV_TYPE_THRESH, IIO_EV_DIR_RISING);
-}
-#endif
-
 static int tsl2563_probe(struct i2c_client *client,
 				const struct i2c_device_id *device_id)
 {
@@ -1029,7 +984,7 @@ static int tsl2563_probe(struct i2c_client *client,
 	int err = 0;
 	u8 id = 0;
 	struct input_dev *input_dev;
-
+	if(DEBUG_F)	printk("tsl2563_probe");
 	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*chip));
 	if (!indio_dev)
 		return -ENOMEM;
@@ -1058,11 +1013,13 @@ static int tsl2563_probe(struct i2c_client *client,
 	mutex_init(&chip->lock);
 
 	/* Default values used until userspace says otherwise */
-#ifdef CONFIG_SENSORS_ADV_AUTOBL
-	chip->threshold_range = DEFAULT_THRES_RANGE;
-#endif
 	chip->low_thres = 0x0;
 	chip->high_thres = 0xffff;
+#ifdef CONFIG_SENSORS_ADV_AUTOBL
+	chip->threshold_range = DEFAULT_THRES_RANGE;
+	chip->last_lux = 0;
+
+#endif
 
 	chip->gainlevel = tsl2563_gainlevel_table;
 	chip->intr = TSL2563_INT_PERSIST(4);
@@ -1141,10 +1098,7 @@ static int tsl2563_probe(struct i2c_client *client,
 		goto input_fail;
 	}
 
-#ifdef CONFIG_SENSORS_ADV_AUTOBL
-	INIT_DELAYED_WORK(&chip->int_enable_work, tsl2563_int_enable_work);
-	schedule_delayed_work(&chip->int_enable_work, 7 * HZ);
-#endif
+ 
 
 	return 0;
 
@@ -1160,7 +1114,7 @@ static int tsl2563_remove(struct i2c_client *client)
 {
 	struct tsl2563_chip *chip = i2c_get_clientdata(client);
 	struct iio_dev *indio_dev = iio_priv_to_dev(chip);
-
+	if(DEBUG_F)	printk("tsl2563_remove");
 	iio_device_unregister(indio_dev);
 	if (!chip->int_enabled)
 		cancel_delayed_work(&chip->poweroff_work);
@@ -1179,7 +1133,7 @@ static int tsl2563_suspend(struct device *dev)
 {
 	struct tsl2563_chip *chip = i2c_get_clientdata(to_i2c_client(dev));
 	int ret;
-
+	if(DEBUG_F)	printk("tsl2563_suspend");
 	mutex_lock(&chip->lock);
 
 	ret = tsl2563_set_power(chip, 0);
@@ -1197,7 +1151,7 @@ static int tsl2563_resume(struct device *dev)
 {
 	struct tsl2563_chip *chip = i2c_get_clientdata(to_i2c_client(dev));
 	int ret;
-
+	if(DEBUG_F)	printk("tsl2563_resume");
 	mutex_lock(&chip->lock);
 
 	ret = tsl2563_set_power(chip, 1);
