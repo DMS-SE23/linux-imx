@@ -143,6 +143,9 @@ struct sgtl5000_priv {
 	u8 micbias_voltage;
 };
 
+
+
+
 /*
  * mic_bias power on/off share the same register bits with
  * output impedance of mic bias, when power on mic bias, we
@@ -294,8 +297,8 @@ static int dac_info_volsw(struct snd_kcontrol *kcontrol,
 {
 	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
 	uinfo->count = 2;
-	uinfo->value.integer.min = 0;
-	uinfo->value.integer.max = 0xfc - 0x3c;
+	uinfo->value.integer.min = 0x60;
+	uinfo->value.integer.max = 0xfc - 0x64;
 	return 0;
 }
 
@@ -339,8 +342,8 @@ static int dac_get_volsw(struct snd_kcontrol *kcontrol,
 	r = (reg & SGTL5000_DAC_VOL_RIGHT_MASK) >> SGTL5000_DAC_VOL_RIGHT_SHIFT;
 
 	/* make sure value fall in (0x3c,0xfc) */
-	l = clamp(l, 0x3c, 0xfc);
-	r = clamp(r, 0x3c, 0xfc);
+	l = clamp(l, 0x64, 0x9c);
+	r = clamp(r, 0x64, 0x9c);
 
 	/* invert it and map to userspace value */
 	l = 0xfc - l;
@@ -387,8 +390,10 @@ static int dac_put_volsw(struct snd_kcontrol *kcontrol,
 	r = ucontrol->value.integer.value[1];
 
 	/* make sure userspace volume fall in (0, 0xfc-0x3c) */
-	l = clamp(l, 0, 0xfc - 0x3c);
-	r = clamp(r, 0, 0xfc - 0x3c);
+	l = clamp(l, 0x60, 0xfc - 0x64);
+	r = clamp(r, 0x60, 0xfc - 0x64);
+	ucontrol->value.integer.value[0] = l;
+	ucontrol->value.integer.value[1] = r;
 
 	/* invert it, get the value can be set to register */
 	l = 0xfc - l;
