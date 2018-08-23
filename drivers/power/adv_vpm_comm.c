@@ -391,7 +391,32 @@ int vpm_get_current_sense(void)
 	return shift_data;
 }
 
+void vpm_set_amp_mute_status(int status)
+{
+	struct adv_vpm_data tp = {0};
 
+	tp.wlen = 3;
+	tp.rlen = 0;
+	tp.data[0] = 0x51;
+	tp.data[1] = status;
+	tp.data[2] = 0x51 ^ status;
+	adv_vpm_tf(&tp);
+}
+
+int vpm_get_amp_mute_status(void)
+{
+	struct adv_vpm_data tp = {0};
+
+	tp.wlen = 2;
+	tp.rlen = 2;
+	tp.data[0] = 0x50;
+	tp.data[1] = 0x50;
+	adv_vpm_tf(&tp);
+
+	printk("VPM amp mute status: %d\n", tp.data[0]);
+
+	return (int)(tp.data[0]);
+}
 
 
 int vpm_get_mode(void){
@@ -692,14 +717,42 @@ static ssize_t adv_vpm_curr_sense_read(struct device *dev, struct device_attribu
 	return sprintf(buf, "%d\n", current_sense);
 }
 
+static ssize_t adv_vpm_amp_mute_write(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
+{
+	int ret = -1;
+	int onoff=0;
+
+	if ('0' == buf[0])
+    {
+		vpm_set_amp_mute_status(0x00);
+		printk("Disable VPM amp mute\n");
+    }else if ('1' == buf[0])
+    {
+		vpm_set_amp_mute_status(0x01);
+		printk("Enable VPM amp mute\n");
+    }
+    return count;
+}
+
+static ssize_t adv_vpm_amp_mute_read(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
+{
+	int onoff = -1;
+
+	onoff = vpm_get_amp_mute_status();
+
+	return sprintf(buf, "%d\n", onoff);
+}
+
+
 
 static DEVICE_ATTR(vpmintmode, S_IRUGO | S_IWUSR, adv_vpm_vpmintmode_read, adv_vpm_vpmintmode_write); // Enable/Disable VPM Interrupt
 static DEVICE_ATTR(vpmbl_curr_sense, S_IRUGO, adv_vpm_curr_sense_read, NULL); // Read backlight current sense
-
+static DEVICE_ATTR(vpm_amp_mute, S_IRUGO | S_IWUSR, adv_vpm_amp_mute_read, adv_vpm_amp_mute_write); // Enable/Disable VPM Interrupt
 
 static struct attribute *adv_vpm_attrs[] = {
 	&dev_attr_vpmintmode.attr,
 	&dev_attr_vpmbl_curr_sense.attr,
+	&dev_attr_vpm_amp_mute.attr,
 	NULL
 };
 
@@ -1199,7 +1252,14 @@ static int battery_vpm_notify_shutdown(struct notifier_block *this,
     if ((code == SYS_POWER_OFF))
  	{  
         adv_vpm_write_power_off();
+		vpm_set_amp_mute_status(0x01);
+		printk("Enable VPM amp mute\n"); 
     }
+	else if((code == SYS_RESTART))
+	{
+		vpm_set_amp_mute_status(0x01);
+		printk("Enable VPM amp mute\n"); 
+	}
     return NOTIFY_DONE;  
 }  
 

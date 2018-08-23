@@ -74,8 +74,6 @@
 			"LINE_IN", "Line In Jack";
 		mux-int-port = <1>;
 		mux-ext-port = <3>;
-		amp-pwr-en-gpios = <&gpio4 15 0>;
-		amp-mute-gpios = <&gpio3 22 0>;
 	};
 
 	mxcfb1: fb@0 {

@@ -27,8 +27,6 @@
 
 #define DAI_NAME_SIZE	32
 
-int amp_pwr_en_gpios = -1, amp_mute_gpios = -1;
-
 struct imx_sgtl5000_data {
 	struct snd_soc_dai_link dai;
 	struct snd_soc_card card;
@@ -62,27 +60,6 @@ static const struct snd_soc_dapm_widget imx_sgtl5000_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("Ext Spk", NULL),
 };
 
-
-
-static int sgtl5000_notifier_notify_shutdown(struct notifier_block *this,  
-       unsigned long code, void *x)  
-{  
-    if ((code == SYS_POWER_OFF) || (code == SYS_DOWN)|| (code == SYS_RESTART))
- 	{ 
-		printk("[Cifese] turn off amp and pwr"); 
-		gpio_direction_output(amp_mute_gpios, 1);
-		mdelay(100);
-        gpio_direction_output(amp_pwr_en_gpios, 0);
-    }
-    return NOTIFY_DONE;  
-} 
-
-static struct notifier_block imx_sgtl5000_notifier = {
-    .notifier_call  = sgtl5000_notifier_notify_shutdown,
-    .next       = NULL,
-    .priority   = INT_MAX, /* should be > ssd pri's and disk dev pri's */
-};
-
 static int imx_sgtl5000_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -104,25 +81,6 @@ static int imx_sgtl5000_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "mux-ext-port missing or invalid\n");
 		return ret;
 	}
-	amp_pwr_en_gpios = of_get_named_gpio(np, "amp-pwr-en-gpios", 0);
-	amp_mute_gpios = of_get_named_gpio(np, "amp-mute-gpios", 0);
-	
-	ret = gpio_request(amp_mute_gpios, "amp mute enable gpios");
-	if(ret)
-		printk("[Cifese] request gpio amp_mute_gpios fail\n");
-	else
-		gpio_direction_output(amp_mute_gpios, 1);
-	
-	ret = gpio_request(amp_pwr_en_gpios, "amp power enable gpios");
-	if(ret)
-		printk("[Cifese] request gpio amp_pwr_en_gpios fail\n");
-	else
-		gpio_direction_output(amp_pwr_en_gpios, 1);
-		
-
-	gpio_direction_output(amp_mute_gpios, 0);
-		
-	
 
 	/*
 	 * The port numbering in the hardware manual starts at 1, while
@@ -217,16 +175,8 @@ static int imx_sgtl5000_probe(struct platform_device *pdev)
 
 	of_node_put(ssi_np);
 	of_node_put(codec_np);
-	
-	if (register_reboot_notifier(&imx_sgtl5000_notifier))
-	{
-		goto exit_free_imx_sgtl5000_notifier;
-	}
 
 	return 0;
-	
-exit_free_imx_sgtl5000_notifier:
-	unregister_reboot_notifier(&imx_sgtl5000_notifier);
 
 fail:
 	if (data && !IS_ERR(data->codec_clk))

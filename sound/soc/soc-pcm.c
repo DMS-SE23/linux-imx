@@ -33,6 +33,7 @@
 #include <sound/initval.h>
 
 #define DPCM_MAX_BE_USERS	8
+#define DAC_KEEP_ON_AFTER_PCM_CLOSE 0
 
 /**
  * snd_soc_runtime_activate() - Increment active count for PCM runtime components
@@ -655,6 +656,7 @@ static int soc_pcm_close(struct snd_pcm_substream *substream)
 	if (platform->driver->ops && platform->driver->ops->close)
 		platform->driver->ops->close(substream);
 
+#if DAC_KEEP_ON_AFTER_PCM_CLOSE
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		if (snd_soc_runtime_ignore_pmdown_time(rtd)) {
 			/* powered down playback stream now */
@@ -673,6 +675,7 @@ static int soc_pcm_close(struct snd_pcm_substream *substream)
 		snd_soc_dapm_stream_event(rtd, SNDRV_PCM_STREAM_CAPTURE,
 					  SND_SOC_DAPM_STREAM_STOP);
 	}
+#endif
 
 	mutex_unlock(&rtd->pcm_mutex);
 
