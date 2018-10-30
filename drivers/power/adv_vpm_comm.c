@@ -231,7 +231,7 @@ int adv_i2c_tf(struct adv_vpm_data *tf_data)
 		xfer.len = tf_data->wlen;
 		xfer.buf = tf_data->data;
 		
-		//printk("vpm write =[%d, %d]\n", tf_data->data[0], tf_data->data[1]);
+		//printk("vpm write(%d) =[%d, %d, %d, %d]\n", tf_data->wlen, tf_data->data[0], tf_data->data[1], tf_data->data[2], tf_data->data[3]);
 		
 		if(i2c_transfer(client_vpm->adapter, &xfer, 1) != 1) 
 		{

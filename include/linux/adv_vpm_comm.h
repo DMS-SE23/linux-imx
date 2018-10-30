@@ -115,6 +115,9 @@ static DEFINE_MUTEX(vpm_pack_mutex);
 #define VPM_24V_SYSTEM_POST_BOOT_VOLTAGE_VALUE_L								0x75    //adv_vpm_comm_0626
 #define VPM_CAR_POWER_VOLTAGE_LOW_PROTECTION_LOAD_D4							0x76    //adv_vpm_comm_0626
 
+#define VPM_BATTERY_PACK_ATRATE_GET												0x80 
+#define VPM_BATTERY_PACK_ATRATE_SET												0x81 
+#define VPM_BATTERY_PACK_ATRATE_TIME_TO_EMPTY									0x82 
 #define VPM_BATTERY_PACK_FLAGS													0x92 
 #define VPM_BATTERY_PACK_STATE_OF_CHARGE										0x9F 
 #define VPM_BATTERY_PACK_TIME_TO_EMPTY_H										0x82
@@ -132,12 +135,12 @@ static DEFINE_MUTEX(vpm_pack_mutex);
 #define VPM_BATTERY_PACK_AVERAGE_CURRENT_H										0x8E
 #define VPM_BATTERY_PACK_AVERAGE_CURRENT_L										0x8F
 
-#define VPM_BATTERY_PACK_ATRATE_H												0x90
-#define VPM_BATTERY_PACK_ATRATE_L												0x91
-#define VPM_BATTERY_PACK_ATRATE_TIME_TO_FULL_H									0x92
-#define VPM_BATTERY_PACK_ATRATE_TIME_TO_FULL_L									0x93
-#define VPM_BATTERY_PACK_ATRATE_TIME_TO_EMPTY_H									0x94
-#define VPM_BATTERY_PACK_ATRATE_TIME_TO_EMTPY_L									0x95
+//#define VPM_BATTERY_PACK_ATRATE_H												0x90
+//#define VPM_BATTERY_PACK_ATRATE_L												0x91
+//#define VPM_BATTERY_PACK_ATRATE_TIME_TO_FULL_H									0x92
+//#define VPM_BATTERY_PACK_ATRATE_TIME_TO_FULL_L									0x93
+//#define VPM_BATTERY_PACK_ATRATE_TIME_TO_EMPTY_H									0x94
+//#define VPM_BATTERY_PACK_ATRATE_TIME_TO_EMTPY_L									0x95
 
 //#define VPM_WLAN_MAC_ADDR_BYTE_1												0xA0	//adv_vpm_comm_0626
 //#define VPM_WLAN_MAC_ADDR_BYTE_2												0xA1    //adv_vpm_comm_0626

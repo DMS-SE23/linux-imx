@@ -89,8 +89,6 @@ static ssize_t power_supply_show_property(struct device *dev,
 			return ret;
 		}
 	}
-	
-	
 
 	if (off == POWER_SUPPLY_PROP_STATUS)
 		return sprintf(buf, "%s\n", status_text[value.intval]);
@@ -99,7 +97,9 @@ static ssize_t power_supply_show_property(struct device *dev,
 			(off == POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG) || (off == POWER_SUPPLY_PROP_TIME_TO_FULL_AVG) || \
 			(off == POWER_SUPPLY_PROP_HEALTH) || (off == POWER_SUPPLY_PROP_CHARGE_FULL) || \
 			(off == POWER_SUPPLY_PROP_MODEL_NAME) || (off == POWER_SUPPLY_PROP_SERIAL_NUMBER) || \
-			(off == POWER_SUPPLY_PROP_MANUFACTURER) || (off == POWER_SUPPLY_PROP_CYCLE_COUNT))
+			(off == POWER_SUPPLY_PROP_MANUFACTURER) || (off == POWER_SUPPLY_PROP_CYCLE_COUNT) || \
+			(off == POWER_SUPPLY_PROP_ATRATE_READ) || (off == POWER_SUPPLY_PROP_ATRATE_WRITE) || \
+			(off == POWER_SUPPLY_PROP_ATRATE_TIME_TO_EMPTY))
 		{
 			if(value.intval == 0xFFFFF)
 				return sprintf(buf, "%s\n", "Unknown");
@@ -211,6 +211,9 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(scope),
 	POWER_SUPPLY_ATTR(charge_term_current),
 	POWER_SUPPLY_ATTR(calibrate),
+	POWER_SUPPLY_ATTR(atrate_read),
+	POWER_SUPPLY_ATTR(atrate_write),
+	POWER_SUPPLY_ATTR(atrate_time_to_empty),
 	/* Properties of type `const char *' */
 	POWER_SUPPLY_ATTR(model_name),
 	POWER_SUPPLY_ATTR(manufacturer),
@@ -228,7 +231,7 @@ static umode_t power_supply_attr_is_visible(struct kobject *kobj,
 	struct power_supply *psy = dev_get_drvdata(dev);
 	umode_t mode = S_IRUSR | S_IRGRP | S_IROTH;
 	int i;
-
+	
 	if (attrno == POWER_SUPPLY_PROP_TYPE)
 		return mode;
 
@@ -237,13 +240,12 @@ static umode_t power_supply_attr_is_visible(struct kobject *kobj,
 
 		if (property == attrno) {
 			if (psy->desc->property_is_writeable &&
-			    power_supply_property_is_writeable(psy, property) > 0)
+			    psy->desc->property_is_writeable(psy, property) > 0)
 				mode |= S_IWUSR;
 
 			return mode;
 		}
 	}
-
 	return 0;
 }
 

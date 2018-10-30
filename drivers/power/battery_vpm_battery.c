@@ -50,7 +50,10 @@ enum {
 	VPM_TEMPERATURE,
 	VPM_VOLTAGE,
 	VPM_CURRENT,
-};
+	VPM_ATRATE_READ,
+	VPM_ATRATE_WRITE,
+	VPM_ATRATE_TIME_TO_EMPTY
+	};
 
 #define POLL_INTERVAL			30
 #define CHARGE_FLAG_CHANGE_INTERVAL	3
@@ -94,6 +97,9 @@ static const struct battery_vpm_device_data {
 	[VPM_TEMPERATURE] =				BATTERY_VPM_DATA(POWER_SUPPLY_PROP_TEMP, 0x93, 0, 65535, 3), //0.1K C=K-237.15
 	[VPM_VOLTAGE] =					BATTERY_VPM_DATA(POWER_SUPPLY_PROP_VOLTAGE_NOW, 0x94, 0, 65535, 3), //mV
 	[VPM_CURRENT] = 			    BATTERY_VPM_DATA(POWER_SUPPLY_PROP_CURRENT_NOW, 0x95, -32768, 32767, 3),//mA
+	[VPM_ATRATE_READ] = 			    BATTERY_VPM_DATA(POWER_SUPPLY_PROP_ATRATE_READ, 0x80, -32768, 32767, 3),//mA
+	[VPM_ATRATE_WRITE] = 			    BATTERY_VPM_DATA(POWER_SUPPLY_PROP_ATRATE_WRITE, 0x81, -32768, 32767, 3),//mA
+	[VPM_ATRATE_TIME_TO_EMPTY] = 	BATTERY_VPM_DATA(POWER_SUPPLY_PROP_ATRATE_TIME_TO_EMPTY, 0x82, 0, 65536, 3),//min
 };
 
 static enum power_supply_property vpm_charger_properties[] = {
@@ -117,10 +123,31 @@ static enum power_supply_property battery_vpm_properties[] = {
 	POWER_SUPPLY_PROP_MODEL_NAME,
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 	POWER_SUPPLY_PROP_MANUFACTURER,
-	POWER_SUPPLY_PROP_CYCLE_COUNT
+	POWER_SUPPLY_PROP_CYCLE_COUNT,
+	POWER_SUPPLY_PROP_ATRATE_READ,
+	POWER_SUPPLY_PROP_ATRATE_WRITE,
+	POWER_SUPPLY_PROP_ATRATE_TIME_TO_EMPTY,
 };
 
 
+static int battery_vpm_write_command(struct adv_vpm_data *vpm_data)
+{
+	s32 ret;
+
+	if (vpm_data->data[0] > 0) {
+        //If vpm is in bootloader mode, we are forbidden to access vpm.
+        if (vpm_is_bootloader_mode()) {
+            return battery_vpm_data[VPM_VOLTAGE].max_value;
+        } else {
+        	mutex_lock(&vpm_pack_mutex);
+			ret = adv_vpm_tf(vpm_data);
+			mutex_unlock(&vpm_pack_mutex);
+
+			return 0;
+        }
+	}
+	return -1;
+}
 
 //struct battery_vpm_info *battery_vpm_device;
 
@@ -449,16 +476,13 @@ static int vpm_charger_get_property(struct power_supply *psy,
 
 		ret = battery_vpm_read_command(&vpm_data);
 
-
 		state = ret & 0x0F;
 		
 		if (state == 0x03)  //Battery mode
 			val->intval = 0;
 		else
 			val->intval = 1;
-
 		//printk(KERN_DEBUG "%s, state = %x, online = %d\n", __func__, state, val->intval);
-		
 		break;
 	default:
 		return -EINVAL;
@@ -466,8 +490,6 @@ static int vpm_charger_get_property(struct power_supply *psy,
 
 	return 0;
 }
-
-
 
 static int battery_vpm_get_property(struct power_supply *psy,
 	enum power_supply_property psp,
@@ -499,6 +521,8 @@ static int battery_vpm_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
 	case POWER_SUPPLY_PROP_FLAGS:
+	case POWER_SUPPLY_PROP_ATRATE_READ:
+	case POWER_SUPPLY_PROP_ATRATE_TIME_TO_EMPTY:
 	
 	if ((psp == POWER_SUPPLY_PROP_CAPACITY) || (psp == POWER_SUPPLY_PROP_VOLTAGE_NOW) || \
 			(psp == POWER_SUPPLY_PROP_CURRENT_NOW) || (psp == POWER_SUPPLY_PROP_TEMP) || \
@@ -506,7 +530,8 @@ static int battery_vpm_get_property(struct power_supply *psy,
 			(psp == POWER_SUPPLY_PROP_HEALTH) || (psp == POWER_SUPPLY_PROP_CHARGE_FULL) || \
 			(psp == POWER_SUPPLY_PROP_MODEL_NAME) || (psp == POWER_SUPPLY_PROP_SERIAL_NUMBER) || \
 			(psp == POWER_SUPPLY_PROP_MANUFACTURER) || (psp == POWER_SUPPLY_PROP_CYCLE_COUNT) || \
-			(psp == POWER_SUPPLY_PROP_CHARGE_NOW))
+			(psp == POWER_SUPPLY_PROP_CHARGE_NOW) || (psp == POWER_SUPPLY_PROP_ATRATE_READ) || \
+			(psp == POWER_SUPPLY_PROP_ATRATE_TIME_TO_EMPTY))
 		{
 			battery_vpm_get_present(val);
 			if(val->intval == 0)
@@ -550,6 +575,64 @@ static int battery_vpm_get_property(struct power_supply *psy,
 	return 0;
 }
 
+static int battery_vpm_set_atrate(int val)
+{
+	struct adv_vpm_data vpm_data;
+	s16 ret;
+	char val_high, val_low;
+
+	ret = (s16)val;
+	val_high = ret >> 8;
+	val_low = (ret << 8) >> 8;
+
+	//printk("battery_vpm_set_atrate:0x%4X: %d (%d,%d)", VPM_BATTERY_PACK_ATRATE_SET, val, val_high, val_low);
+
+	vpm_data.wlen = 4;
+	vpm_data.rlen = 0;
+	vpm_data.data[0] = VPM_BATTERY_PACK_ATRATE_SET;
+	vpm_data.data[1] = val_high;
+	vpm_data.data[2] = val_low;
+	vpm_data.data[3] = VPM_BATTERY_PACK_ATRATE_SET ^ val_high ^ val_low;
+
+	ret = battery_vpm_write_command(&vpm_data);
+	return 0;
+}
+
+static int battery_vpm_set_property(struct power_supply *ps,
+		enum power_supply_property prop,
+		const union power_supply_propval *val)
+{
+	int count;
+	int ret;
+	union power_supply_propval val_check;
+	
+	switch (prop) {
+	case POWER_SUPPLY_PROP_ATRATE_WRITE:
+			battery_vpm_set_atrate(val->intval);
+			break;
+	default:
+			printk(KERN_ERR "%s: INVALID property\n", __func__);
+			return -EINVAL;
+	}
+	return 0;
+}
+
+
+static int battery_vpm_property_is_writeable(struct power_supply *psy,
+	enum power_supply_property psp)
+{
+	int ret = 0;
+	switch (psp) {
+	case POWER_SUPPLY_PROP_ATRATE_WRITE:
+		ret = 1;
+		break;
+	default:
+		ret = 0;
+	}
+	return ret;
+}
+
+
 
 static const struct of_device_id vpm_dt_ids[] = {
         { .compatible = "fsl,vpm-battery", },
@@ -563,7 +646,7 @@ static int battery_vpm_probe(struct platform_device *pdev)
 	struct battery_vpm_info *data;
 	struct device *dev = &pdev->dev;
 	struct battery_vpm_pinfo *pdata = pdev->dev.platform_data;
-	struct power_supply_config psy_cfg = {};
+	struct power_supply_config psy_cfg = {}, bat_cfg = {};
 	int rc;
 
 	printk("%s \n", __func__);
@@ -592,22 +675,24 @@ static int battery_vpm_probe(struct platform_device *pdev)
 		printk("%s failed: power supply register.\n", __func__);
 		//goto err_psy;
 	}
-	
+
 	data->bat_desc.name = "battery";
 	data->bat_desc.type = POWER_SUPPLY_TYPE_BATTERY;
-	data->bat_desc.get_property = battery_vpm_get_property;
 	data->bat_desc.properties = battery_vpm_properties;
 	data->bat_desc.num_properties = ARRAY_SIZE(battery_vpm_properties);
+	data->bat_desc.get_property = battery_vpm_get_property;
+	data->bat_desc.set_property	= battery_vpm_set_property;
+	data->bat_desc.property_is_writeable= battery_vpm_property_is_writeable;
 	
-	psy_cfg.drv_data = data;
+	bat_cfg.drv_data = data;
 	
-	
-	data->psy = power_supply_register(&pdev->dev, &data->bat_desc, &psy_cfg);
-	if (IS_ERR(data->psy)) {
+	printk("battery_vpm_property ++\n");
+	data->bat = power_supply_register(dev, &data->bat_desc, &bat_cfg);
+	printk("battery_vpm_property --\n");
+	if (IS_ERR(data->bat)) {
 		printk("%s failed: power supply register.\n", __func__);
 		//goto err_psy;
 	}
-
 	return 0;
 }
 
