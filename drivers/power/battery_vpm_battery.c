@@ -318,7 +318,7 @@ static void battery_vpm_error_bit(s32 error_flag, union power_supply_propval *va
 	{
 		for(i = 32768; i ; i >>= 1 )
 		{
-			//printk("%d-%d ",i, (error_flag&i)?1:0);
+			//printk("%d-%d ",(16-j), (error_flag&i)?1:0);
 			adv_char[j++] = (error_flag&i)?1:0;
 			if(error_flag&i)
 			{
@@ -444,7 +444,13 @@ static int battery_vpm_get_battery_property(
 				val->strval = adv_char;
 				break;
 			case POWER_SUPPLY_PROP_SERIAL_NUMBER: 
-				ret = sprintf(adv_char, "%d", vpm_data.data[1]);
+				if(vpm_data.data[0] == 0)
+					ap = sprintf(ap, "%d", vpm_data.data[1]);
+				else{
+					for(i = 0; i <=1 ; i++ )
+						ap += sprintf(ap, "%d", vpm_data.data[i]);
+				}
+
 				val->strval = adv_char;
 				break;
 		}
@@ -686,9 +692,8 @@ static int battery_vpm_probe(struct platform_device *pdev)
 	
 	bat_cfg.drv_data = data;
 	
-	printk("battery_vpm_property ++\n");
 	data->bat = power_supply_register(dev, &data->bat_desc, &bat_cfg);
-	printk("battery_vpm_property --\n");
+
 	if (IS_ERR(data->bat)) {
 		printk("%s failed: power supply register.\n", __func__);
 		//goto err_psy;
