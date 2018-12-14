@@ -245,6 +245,19 @@ typedef enum
 	Battery_Terminate_Charge_Alarm,		//14
 	Battery_Overcharged_Alarm			//15
 } enum_battery_error_flag;
+
+typedef enum
+{
+	I2C_Ok = 0,                 //0
+	I2C_Busy,                   //1
+	I2C_Reserved_Command,       //2
+	I2C_Unsupported_Command,    //3
+	I2C_Access_Denied,          //4
+	I2C_Overflow_Underflow,     //5
+	I2C_Badsize,                //6
+	I2C_UnknownError,           //7
+} enum_battery_error_code;
+
 typedef enum
 {
 	Battery_Err_Unknown = 0,			//0

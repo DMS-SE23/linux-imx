@@ -301,8 +301,8 @@ bit4: Dead
 */
 static void battery_vpm_error_bit(s32 error_flag, union power_supply_propval *val)
 {
-	int i, j = 0;
-	static char adv_char[16] = {0}, adv_flag[8] = {0}, adv_flag_report[8] = {0};
+	int i, j = 0, i2c_error_code = 0;
+	static char adv_char[16] = {0}, adv_flag[8] = {0}, adv_flag_report[8] = {0}, i2c_error[4] = {0};
 	char *ap = adv_char, *ap_report = adv_flag_report;
 	union power_supply_propval val_check;
 
@@ -328,7 +328,7 @@ static void battery_vpm_error_bit(s32 error_flag, union power_supply_propval *va
 					case Battery_Err1:
 					case Battery_Err2:
 					case Battery_Err3:
-						adv_flag[Battery_Err_Unknown] = 1;
+						i2c_error[16-j] = 1;
 						break;
 					case Battery_Overtemperature_Alarm:
 						adv_flag[Battery_Err_Over_Heat] = 1;
@@ -336,14 +336,27 @@ static void battery_vpm_error_bit(s32 error_flag, union power_supply_propval *va
 					case Battery_Overcharged_Alarm:
 						adv_flag[Battery_Err_Over_Voltage] = 1;
 						break;
-					case Battery_Terminate_Discharge_Alarm:
-					case Battery_Terminate_Charge_Alarm:
-						adv_flag[Battery_Err_Unspecified_Fail] = 1;
-						break;
+					//case Battery_Terminate_Discharge_Alarm:
+					//case Battery_Terminate_Charge_Alarm:
+					//	adv_flag[Battery_Err_Unspecified_Fail] = 1;
+					//	break;
 				}
 			}
 		}
 	}
+
+	for(i = 0; i <= 3; i++)
+		i2c_error_code += i2c_error[i] << i;
+
+	switch (i2c_error_code) {
+		case I2C_UnknownError:
+		case I2C_Badsize:
+		case I2C_Overflow_Underflow:
+		case I2C_Unsupported_Command:
+			adv_flag[Battery_Err_Unspecified_Fail] = 1;
+			printk("i2c_error_code=%d\n", i2c_error_code);
+			break;
+		}
 
 	for( i = 1; i <= Battery_Err_Total; i++)
 		ap_report += sprintf(ap_report, "%d", adv_flag[Battery_Err_Total-i]);
