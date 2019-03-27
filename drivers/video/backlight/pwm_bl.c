@@ -44,6 +44,21 @@ struct pwm_bl_data {
 	char			fb_id[16];
 };
 
+#ifdef CONFIG_BACKLIGHT_PWM_CURR_FILTER
+struct backlight_device *bl_dev;
+
+int pwm_backlight_obtain_brightness(void)
+{
+	int brightness = 0;
+
+	brightness = bl_dev->props.brightness;
+
+	return brightness;
+}
+
+EXPORT_SYMBOL(pwm_backlight_obtain_brightness);
+#endif
+
 static void pwm_backlight_power_on(struct pwm_bl_data *pb, int brightness)
 {
 	int err;
@@ -333,6 +348,10 @@ static int pwm_backlight_probe(struct platform_device *pdev)
 		ret = PTR_ERR(bl);
 		goto err_alloc;
 	}
+
+#ifdef CONFIG_BACKLIGHT_PWM_CURR_FILTER
+	bl_dev = bl;
+#endif
 
 	if (data->dft_brightness > data->max_brightness) {
 		dev_warn(&pdev->dev,

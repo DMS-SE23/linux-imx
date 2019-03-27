@@ -708,13 +708,57 @@ static ssize_t adv_vpm_vpmintmode_read(struct device *dev, struct device_attribu
 	return sprintf(buf, "%d\n", onoff);
 }
 
+#ifdef CONFIG_BACKLIGHT_PWM_CURR_FILTER
+extern int pwm_backlight_obtain_brightness(void);
+
+static int adv_vpm_curr_sense_filter(int backlight_current)
+{
+	int brightness  = 0;
+	int upper_bound = 0;
+	int lower_bound = 0;
+
+	int scalar = 178;
+	int offset = 2500;
+
+	int backlight_current_mul = 0;
+
+	brightness = pwm_backlight_obtain_brightness();
+
+	//formula : brightness * 1.78 +- 25
+	upper_bound = brightness * scalar + offset;
+	lower_bound = brightness * scalar - offset;
+
+	backlight_current_mul = backlight_current * 100;
+
+	pr_info("%s\n", __func__);
+	pr_info("brightness  : %d\n", brightness);
+	pr_info("bkl_current : %d\n", backlight_current);
+	pr_info("upper_bound : %d.%d\n", upper_bound/100, upper_bound%100);
+	pr_info("lower_bound : %d.%d\n", lower_bound/100, lower_bound%100);
+
+	if((backlight_current_mul > upper_bound) || 
+		      (backlight_current_mul < lower_bound)) {
+		pr_err("%s : over boundary - brightness = %d, curr = %d\n", __func__, brightness, backlight_current);
+
+		backlight_current = -1;
+	}	
+
+	return backlight_current;
+}
+#endif
+
 static ssize_t adv_vpm_curr_sense_read(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
-	int current_sense = -1;
 
-	current_sense = vpm_get_current_sense();
+	int curr_sense = -1;
 
-	return sprintf(buf, "%d\n", current_sense);
+	curr_sense = vpm_get_current_sense();
+
+#ifdef CONFIG_BACKLIGHT_PWM_CURR_FILTER
+	curr_sense = adv_vpm_curr_sense_filter(curr_sense);
+#endif
+
+	return sprintf(buf, "%d\n", curr_sense);
 }
 
 static ssize_t adv_vpm_amp_mute_write(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
