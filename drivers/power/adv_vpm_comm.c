@@ -272,7 +272,7 @@ int adv_vpm_tf(struct adv_vpm_data *tf_data)
 {
 	if (bootloaderMode)
 	{
-		printk("The system is in the bootloader mode");
+		printk("VPM is in the bootloader mode\n");
 		return -1;
 	}
 	
@@ -331,8 +331,10 @@ int vpm_get_version(void)
 	tp.rlen = 3;
 	tp.data[0] = 0xF0;
 	tp.data[1] = 0xF0;
-	adv_vpm_tf(&tp);
 
+	ret = adv_vpm_tf(&tp);
+	if (ret == -1)
+		return NULL;
 	printk("VPM Version: %d.%d\n", tp.data[0], tp.data[1]);
 
 	ret = 0;
@@ -354,14 +356,17 @@ void vpm_set_interrupt_status(int status)
 
 int vpm_get_interrupt_status(void)
 {
+	int ret = -1;
 	struct adv_vpm_data tp = {0};
 
 	tp.wlen = 2;
 	tp.rlen = 2;
 	tp.data[0] = VPM_GET_INTERRUPT_STATUS;
 	tp.data[1] = VPM_GET_INTERRUPT_STATUS;
-	adv_vpm_tf(&tp);
+	ret = adv_vpm_tf(&tp);
 
+	if (ret == -1)
+		return NULL;
 	printk("VPM Interrupt Status: %d\n", tp.data[0]);
 
 	return (int)(tp.data[0]);
@@ -369,13 +374,17 @@ int vpm_get_interrupt_status(void)
 
 int vpm_get_current_sense(void)
 {
+	int ret = -1;
 	struct adv_vpm_data tp = {0};
 
 	tp.wlen = 2;
 	tp.rlen = 2;
 	tp.data[0] = VPM_GET_BACKLIGHT_CURRENT_SENSE;
 	tp.data[1] = VPM_GET_BACKLIGHT_CURRENT_SENSE;
-	adv_vpm_tf(&tp);
+	ret = adv_vpm_tf(&tp);
+
+	if (ret == -1)
+		return NULL;
 
 	int shift_data = 0;
 
@@ -403,12 +412,15 @@ void vpm_set_amp_mute_status(int status)
 int vpm_get_amp_mute_status(void)
 {
 	struct adv_vpm_data tp = {0};
+	int ret = -1;
 
 	tp.wlen = 2;
 	tp.rlen = 2;
 	tp.data[0] = 0x50;
 	tp.data[1] = 0x50;
-	adv_vpm_tf(&tp);
+	ret = adv_vpm_tf(&tp);
+	if (ret == -1)
+		return NULL;
 
 	printk("VPM amp mute status: %d\n", tp.data[0]);
 
@@ -424,7 +436,9 @@ int vpm_get_mode(void)
 	tp.rlen = 2;
 	tp.data[0] = 0xFE;
 	tp.data[1] = 0xFE;
-	adv_vpm_tf(&tp);
+	ret = adv_vpm_tf(&tp);
+	if (ret == -1)
+		return ret;
 
 	printk("vpm_get_download_mode: %d\n", tp.data[0]);
 
@@ -471,7 +485,9 @@ int vpm_set_wwan_on_off(int on_off)
 		tp.data[1] = 0x00;
 	}
 
-	adv_vpm_tf(&tp);
+	ret = adv_vpm_tf(&tp);
+	if (ret == -1)
+		return ret;
 
 	ret = 0;
 
@@ -487,7 +503,9 @@ int vpm_get_wwan_on_off(void)
 	tp.rlen = 1;
 	tp.data[0] = 0x50;
 
-	adv_vpm_tf(&tp);
+	ret = adv_vpm_tf(&tp);
+	if (ret == -1)
+		return ret;
 
 	dbg("VPM WWAN status = [%d]  \n", tp.data[0]);
 
@@ -557,7 +575,9 @@ static int adv_vpm_write_power_off(void)
 	tp.rlen = 1;
 	tp.data[0] = 0x39;
 	tp.data[1] = 0x39;
-	adv_vpm_tf(&tp);
+	ret = adv_vpm_tf(&tp);
+	if (ret == -1)
+		return NULL;
 
 	return tp.data[0];
 }
@@ -566,12 +586,15 @@ static int adv_vpm_read_event(void)
 {
 	u16 event_interrupt = 0, shift_high = 0;
 	struct adv_vpm_data tp = {0};
+	int ret = -1;
 
 	tp.wlen = 2;
 	tp.rlen = 3;
 	tp.data[0] = VPM_GET_INTERRUPT_EVENT;
 	tp.data[1] = VPM_GET_INTERRUPT_EVENT;
-	adv_vpm_tf(&tp);
+	ret = adv_vpm_tf(&tp);
+	if (ret == -1)
+		return ret;
 	shift_high = tp.data[0];
 	event_interrupt = (shift_high << 8) + tp.data[1];
 
@@ -704,6 +727,8 @@ static ssize_t adv_vpm_vpmintmode_read(struct device *dev, struct device_attribu
 	int onoff = -1;
 
 	onoff = vpm_get_interrupt_status();
+	if (onoff == NULL)
+		return sprintf(buf, "%s\n", "Unknown");
 
 	return sprintf(buf, "%d\n", onoff);
 }
@@ -753,6 +778,8 @@ static ssize_t adv_vpm_curr_sense_read(struct device *dev, struct device_attribu
 	int curr_sense = -1;
 
 	curr_sense = vpm_get_current_sense();
+	if (curr_sense == NULL)
+		return sprintf(buf, "%s\n", "Unknown");
 
 #ifdef CONFIG_BACKLIGHT_PWM_CURR_FILTER
 	curr_sense = adv_vpm_curr_sense_filter(curr_sense);
@@ -785,20 +812,30 @@ static ssize_t adv_vpm_amp_mute_read(struct device *dev, struct device_attribute
 	int onoff = -1;
 
 	onoff = vpm_get_amp_mute_status();
+	if (onoff == NULL)
+		return sprintf(buf, "%s\n", "Unknown");
 
 	return sprintf(buf, "%d\n", onoff);
 }
 
+static ssize_t adv_vpm_bootloader_mode_read(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
+{
+	int download_mode = -1;
 
+	download_mode = vpm_is_bootloader_mode();
 
+	return sprintf(buf, "%d\n", download_mode);
+}
 static DEVICE_ATTR(vpmintmode, S_IRUGO | S_IWUSR, adv_vpm_vpmintmode_read, adv_vpm_vpmintmode_write); // Enable/Disable VPM Interrupt
 static DEVICE_ATTR(vpmbl_curr_sense, S_IRUGO, adv_vpm_curr_sense_read, NULL); // Read backlight current sense
 static DEVICE_ATTR(vpm_amp_mute, S_IRUGO | S_IWUSR, adv_vpm_amp_mute_read, adv_vpm_amp_mute_write); // Enable/Disable VPM Interrupt
+static DEVICE_ATTR(vpm_bootloader_mode, S_IRUGO, adv_vpm_bootloader_mode_read, NULL); // Check VPM bootloader mode
 
 static struct attribute *adv_vpm_attrs[] = {
 	&dev_attr_vpmintmode.attr,
 	&dev_attr_vpmbl_curr_sense.attr,
 	&dev_attr_vpm_amp_mute.attr,
+	&dev_attr_vpm_bootloader_mode.attr,
 	NULL
 };
 
@@ -858,7 +895,7 @@ static long vpm_ioctl_ioctl(struct file *filp, unsigned int cmd, unsigned long a
 		}
 		else
 		{
-			retval = adv_vpm_tf(&tp);
+			retval = adv_i2c_tf(&tp);
 		}
 		break;
     case IOCTL_VALGET:
@@ -875,7 +912,7 @@ static long vpm_ioctl_ioctl(struct file *filp, unsigned int cmd, unsigned long a
 		}
 		else
 		{
-			retval = adv_vpm_tf(&tp);
+			retval = adv_i2c_tf(&tp);
 		}
 
 		if (copy_to_user((int __user *)arg, &tp, sizeof(tp)) )
@@ -1138,6 +1175,7 @@ static int adv_vpm_probe(struct i2c_client *client, const struct i2c_device_id *
 
 	RegisterVPMEventFunc(VPM_ByPass_EVENT, vpm_bypass_event_handler_func);
 
+	vpm_is_bootloader_mode();
 	vpm_get_version();
 
 	//vpm_set_interrupt_status(VPM_I2C_INTERRUPT_ENABLE);

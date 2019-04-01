@@ -99,7 +99,7 @@ static ssize_t power_supply_show_property(struct device *dev,
 			(off == POWER_SUPPLY_PROP_MODEL_NAME) || (off == POWER_SUPPLY_PROP_SERIAL_NUMBER) || \
 			(off == POWER_SUPPLY_PROP_MANUFACTURER) || (off == POWER_SUPPLY_PROP_CYCLE_COUNT) || \
 			(off == POWER_SUPPLY_PROP_ATRATE_READ) || (off == POWER_SUPPLY_PROP_ATRATE_WRITE) || \
-			(off == POWER_SUPPLY_PROP_ATRATE_TIME_TO_EMPTY))
+			(off == POWER_SUPPLY_PROP_CHARGE_NOW) || (off == POWER_SUPPLY_PROP_ATRATE_TIME_TO_EMPTY))
 		{
 			if(value.intval == 0xFFFFF)
 				return sprintf(buf, "%s\n", "Unknown");

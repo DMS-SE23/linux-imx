@@ -137,7 +137,7 @@ static int battery_vpm_write_command(struct adv_vpm_data *vpm_data)
 	if (vpm_data->data[0] > 0) {
         //If vpm is in bootloader mode, we are forbidden to access vpm.
         if (vpm_is_bootloader_mode()) {
-            return battery_vpm_data[VPM_VOLTAGE].max_value;
+            return NULL;
         } else {
         	mutex_lock(&vpm_pack_mutex);
 			ret = adv_vpm_tf(vpm_data);
@@ -160,7 +160,7 @@ static int battery_vpm_read_command(struct adv_vpm_data *vpm_data)
 	if (vpm_data->data[0] > 0) {
         //If vpm is in bootloader mode, we are forbidden to access vpm.
         if (vpm_is_bootloader_mode()) {
-            return battery_vpm_data[VPM_VOLTAGE].max_value;
+            return NULL;
         } else {
         
         	mutex_lock(&vpm_pack_mutex);
@@ -666,7 +666,7 @@ static int battery_vpm_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct battery_vpm_pinfo *pdata = pdev->dev.platform_data;
 	struct power_supply_config psy_cfg = {}, bat_cfg = {};
-	int rc;
+	int rc, err = -1;
 
 	printk("%s \n", __func__);
 
