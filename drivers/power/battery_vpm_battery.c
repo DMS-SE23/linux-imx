@@ -90,7 +90,7 @@ static const struct battery_vpm_device_data {
 	[VPM_CHARGE_NOW] =			    BATTERY_VPM_DATA(POWER_SUPPLY_PROP_CHARGE_NOW, 0x98, 0, 65536, 3), 
 	[VPM_FULL_CHARGE_FULL] =	    BATTERY_VPM_DATA(POWER_SUPPLY_PROP_CHARGE_FULL, 0x99, 0, 65536, 3), 
 	[VPM_DEVICE_NAME] =	            BATTERY_VPM_DATA(POWER_SUPPLY_PROP_MODEL_NAME, 0x9A, 0, 65536, 20), 
-	[VPM_SERIAL_NUMBER] =	        BATTERY_VPM_DATA(POWER_SUPPLY_PROP_SERIAL_NUMBER, 0x9B, 0, 65536, 3), 
+	[VPM_SERIAL_NUMBER] =	        BATTERY_VPM_DATA(POWER_SUPPLY_PROP_SERIAL_NUMBER, 0x9E, 0, 65536, 10), 
 	[VPM_MANUFACTURER_NAME] =	    BATTERY_VPM_DATA(POWER_SUPPLY_PROP_MANUFACTURER, 0x9C, 0, 65536, 20), 
 	[VPM_CYCLE_COUNT] = 			BATTERY_VPM_DATA(POWER_SUPPLY_PROP_CYCLE_COUNT, 0x9D, 0, 65535, 3),
 	[VPM_STATUS] =					BATTERY_VPM_DATA(POWER_SUPPLY_PROP_STATUS, 0x9F, 0, 65535, 3), 
@@ -404,7 +404,7 @@ static int battery_vpm_get_battery_property(
 	union power_supply_propval *val)
 {
 	s32 ret;
-	static char adv_char[20];
+	static char adv_char[20] = {0};
 	char *ap = adv_char;
 	int i = 0;
 	struct adv_vpm_data vpm_data;
@@ -456,14 +456,23 @@ static int battery_vpm_get_battery_property(
 
 				val->strval = adv_char;
 				break;
-			case POWER_SUPPLY_PROP_SERIAL_NUMBER: 
-				if(vpm_data.data[0] == 0)
-					ap = sprintf(ap, "%d", vpm_data.data[1]);
-				else{
-					for(i = 0; i <=1 ; i++ )
-						ap += sprintf(ap, "%d", vpm_data.data[i]);
-				}
+			case POWER_SUPPLY_PROP_SERIAL_NUMBER:
+				for(i = 0; i < vpm_data.rlen; i++) {
+					if(((vpm_data.data[i] >= '0') && (vpm_data.data[i] <= '9')) || \
+					   ((vpm_data.data[i] >= 'A') && (vpm_data.data[i] <= 'Z')) || \
+					   ((vpm_data.data[i] >= 'a') && (vpm_data.data[i] <= 'z'))) {
 
+						ap += sprintf(ap, "%c", vpm_data.data[i]);
+					} else {
+						pr_info("[BATT_SN] : unknown data[%d] = 0x%x\n", i, vpm_data.data[i]);
+
+						//fill with char '*'
+						memset(adv_char, 0x2A, vpm_data.rlen);
+						break;
+					}
+				}
+				pr_info("[BATT_SN] : %s\n", adv_char);
+				
 				val->strval = adv_char;
 				break;
 		}
