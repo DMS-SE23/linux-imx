@@ -427,6 +427,66 @@ int vpm_get_amp_mute_status(void)
 	return (int)(tp.data[0]);
 }
 
+int vpm_get_amp_power_status(void)
+{
+	struct adv_vpm_data tp = {0};
+	int ret = -1;
+
+	tp.wlen = 2;
+	tp.rlen = 2;
+	tp.data[0] = 0x52;
+	tp.data[1] = 0x52;
+	ret = adv_vpm_tf(&tp);
+	if (ret == -1)
+		return NULL;
+
+	printk("VPM amp power status: %d\n", tp.data[0]);
+
+	return (int)(tp.data[0]);	
+}
+
+void vpm_set_amp_power_status(int status)
+{
+	struct adv_vpm_data tp = {0};
+
+	tp.wlen = 3;
+	tp.rlen = 0;
+	tp.data[0] = 0x53;
+	tp.data[1] = status;
+	tp.data[2] = 0x53 ^ status;
+	adv_vpm_tf(&tp);	
+}
+
+int vpm_get_amp_chip_status(void)
+{
+	struct adv_vpm_data tp = {0};
+	int ret = -1;
+
+	tp.wlen = 2;
+	tp.rlen = 2;
+	tp.data[0] = 0x54;
+	tp.data[1] = 0x54;
+	ret = adv_vpm_tf(&tp);
+	if (ret == -1)
+		return NULL;
+
+	printk("VPM amp chip status: %d\n", tp.data[0]);
+
+	return (int)(tp.data[0]);	
+}
+
+void vpm_set_amp_chip_status(int status)
+{
+	struct adv_vpm_data tp = {0};
+
+	tp.wlen = 3;
+	tp.rlen = 0;
+	tp.data[0] = 0x55;
+	tp.data[1] = status;
+	tp.data[2] = 0x55 ^ status;
+	adv_vpm_tf(&tp);	
+}
+
 int vpm_get_mode(void)
 {
 	int ret = -1;
@@ -818,6 +878,66 @@ static ssize_t adv_vpm_amp_mute_read(struct device *dev, struct device_attribute
 	return sprintf(buf, "%d\n", onoff);
 }
 
+static ssize_t adv_vpm_amp_power_write(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
+{
+	int ret = -1;
+	int onoff = 0;
+
+	if ('0' == buf[0])
+	{
+		vpm_set_amp_power_status(0);
+		printk("Disable VPM amp power\n");
+	}
+	else if ('1' == buf[0])
+	{
+		vpm_set_amp_power_status(1);
+		printk("Enable VPM amp power\n");
+	}
+
+	return count;
+}
+
+static ssize_t adv_vpm_amp_power_read(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
+{
+	int onoff = -1;
+
+	onoff = vpm_get_amp_power_status();
+	if (onoff == NULL)
+		return sprintf(buf, "%s\n", "Unknown");
+
+	return sprintf(buf, "%d\n", onoff);
+}
+
+static ssize_t adv_vpm_amp_chip_write(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
+{
+	int ret = -1;
+	int onoff = 0;
+
+	if ('0' == buf[0])
+	{
+		vpm_set_amp_chip_status(0);
+		printk("Disable VPM amp chip\n");
+	}
+	else if ('1' == buf[0])
+	{
+		vpm_set_amp_chip_status(1);
+		printk("Enable VPM amp chip\n");
+	}
+
+	return count;
+}
+
+static ssize_t adv_vpm_amp_chip_read(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
+{
+	int onoff = -1;
+
+	onoff = vpm_get_amp_chip_status();
+	if (onoff == NULL)
+		return sprintf(buf, "%s\n", "Unknown");
+
+	return sprintf(buf, "%d\n", onoff);
+}
+
 static ssize_t adv_vpm_bootloader_mode_read(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	int download_mode = -1;
@@ -828,14 +948,18 @@ static ssize_t adv_vpm_bootloader_mode_read(struct device *dev, struct device_at
 }
 static DEVICE_ATTR(vpmintmode, S_IRUGO | S_IWUSR, adv_vpm_vpmintmode_read, adv_vpm_vpmintmode_write); // Enable/Disable VPM Interrupt
 static DEVICE_ATTR(vpmbl_curr_sense, S_IRUGO, adv_vpm_curr_sense_read, NULL); // Read backlight current sense
-static DEVICE_ATTR(vpm_amp_mute, S_IRUGO | S_IWUSR, adv_vpm_amp_mute_read, adv_vpm_amp_mute_write); // Enable/Disable VPM Interrupt
+static DEVICE_ATTR(vpm_amp_mute, S_IRUGO | S_IWUSR, adv_vpm_amp_mute_read, adv_vpm_amp_mute_write); // Enable/Disable Audio AMP Mute
 static DEVICE_ATTR(vpm_bootloader_mode, S_IRUGO, adv_vpm_bootloader_mode_read, NULL); // Check VPM bootloader mode
+static DEVICE_ATTR(vpm_amp_power, S_IRUGO | S_IWUSR, adv_vpm_amp_power_read, adv_vpm_amp_power_write); // Enable/Disable Audio AMP Power
+static DEVICE_ATTR(vpm_amp_on, S_IRUGO | S_IWUSR, adv_vpm_amp_chip_read, adv_vpm_amp_chip_write);      // Enable/Disable Audio AMP Chip
 
 static struct attribute *adv_vpm_attrs[] = {
 	&dev_attr_vpmintmode.attr,
 	&dev_attr_vpmbl_curr_sense.attr,
 	&dev_attr_vpm_amp_mute.attr,
 	&dev_attr_vpm_bootloader_mode.attr,
+	&dev_attr_vpm_amp_power.attr,
+	&dev_attr_vpm_amp_on.attr,
 	NULL
 };
 
@@ -1208,6 +1332,14 @@ static int adv_vpm_probe(struct i2c_client *client, const struct i2c_device_id *
 	{
 		device_create(vpm_class, NULL, dev, NULL, devicename);
 	}
+
+	printk(KERN_INFO "[%s] mute amplifier\n", __func__);
+	vpm_set_amp_mute_status(1);
+	
+	mdelay(5);
+	
+	printk(KERN_INFO "[%s] disable amplifier\n", __func__);
+	vpm_set_amp_chip_status(0);
 
 	printk(KERN_ALERT "%s driver(major: %d) installed.\n", DRIVER_NAME, ioctl_major);
 
