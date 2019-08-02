@@ -271,6 +271,7 @@
 		interrupt-parent = <&gpio4>;
 		interrupts = <6 8>;
 		int-gpios = <&gpio4 6 0>;
+		rst-gpios = <&gpio4 7 0>;
 	};
 };
 
@@ -321,6 +322,7 @@
 				MX6QDL_PAD_SD1_CLK__GPIO1_IO20  0x80000000 // VPM INT
 				MX6QDL_PAD_KEY_ROW1__GPIO4_IO09 0x80000000
 				MX6QDL_PAD_GPIO_0__GPIO1_IO00 0x80000000
+				MX6QDL_PAD_KEY_ROW0__GPIO4_IO07 0x80000000 //TP_RESET
 			>;
 		};
 

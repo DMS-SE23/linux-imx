@@ -96,6 +96,7 @@ struct _egalax_i2c {
 	unsigned char skip_packet;
 	unsigned int ioctl_cmd;
 	int interrupt_gpio;
+	int reset_gpio;
 };
 
 struct egalax_char_dev
@@ -392,6 +393,35 @@ static ssize_t egalax_proc_write(struct file *file, const char __user *buf, size
 
 	return procfs_buffer_size;
 }
+
+static ssize_t egalax_reset_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
+{
+	pr_info("prepare to reset egalax touchscreen\n");
+	
+	if (gpio_is_valid(p_egalax_i2c_dev->reset_gpio))
+	{
+		gpio_set_value(p_egalax_i2c_dev->reset_gpio, 0);
+		
+		mdelay(5);
+		
+		gpio_set_value(p_egalax_i2c_dev->reset_gpio, 1);
+	}
+	else	
+		pr_info("invalid reset gpio : %d\n", p_egalax_i2c_dev->reset_gpio);
+	
+	return count;
+}
+
+static DEVICE_ATTR(reset, S_IRUGO | S_IWUSR, NULL, egalax_reset_store);
+
+static struct attribute *egalax_attrs[] = {
+	&dev_attr_reset.attr,
+	NULL
+};
+
+static const struct attribute_group egalax_attrs_group = {
+	.attrs = egalax_attrs,
+};
 
 #define MAX_POINT_PER_PACKET	5
 #define POINT_STRUCT_SIZE	10
@@ -871,6 +901,32 @@ static int __devinit egalax_i2c_probe(struct i2c_client *client, const struct i2
 	}
 	gpio_direction_input(p_egalax_i2c_dev->interrupt_gpio);
 
+	// reset touchscreen
+	EGALAX_DBG(DBG_MODULE, "reset\n");
+	p_egalax_i2c_dev->reset_gpio = of_get_named_gpio(devnode, "rst-gpios", 0);
+	
+	if (gpio_is_valid(p_egalax_i2c_dev->reset_gpio))
+	{
+		/* this pulls reset down, enabling the low active reset */
+		ret = devm_gpio_request_one(&client->dev,
+					p_egalax_i2c_dev->reset_gpio, GPIOF_OUT_INIT_LOW,
+					"egalax reset");
+	
+		if (ret)
+		{
+			dev_err(&client->dev,
+				"Failed to request GPIO %d as reset pin, error %d\n",
+				p_egalax_i2c_dev->reset_gpio, ret);
+			
+			return ret;
+		}
+
+		mdelay(5);
+		
+		gpio_set_value(p_egalax_i2c_dev->reset_gpio, 1);
+	}
+
+
 	input_dev = allocate_Input_Dev();
 	if(input_dev==NULL)
 	{
@@ -911,6 +967,13 @@ static int __devinit egalax_i2c_probe(struct i2c_client *client, const struct i2
 	EGALAX_DBG(DBG_MODULE, " Register early_suspend done\n");
 #endif
 
+	ret = sysfs_create_group(&client->dev.kobj, &egalax_attrs_group);
+	if (ret)
+	{
+		EGALAX_DBG(DBG_MODULE, "create sysfs failed %d\n", ret);
+		goto fail3;
+	}
+	
 	EGALAX_DBG(DBG_MODULE, " I2C probe done\n");
 	return 0;
 
