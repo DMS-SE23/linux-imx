@@ -121,6 +121,8 @@ static struct input_dev *input_dev = NULL;
 static struct tagMTContacts pContactBuf[MAX_SUPPORT_POINT];
 static unsigned char input_report_buf[MAX_I2C_LEN+2];
 
+extern int i2c_imx_get_status(void);
+
 #define DBG_MODULE	0x00000001
 #define DBG_CDEV	0x00000002
 #define DBG_PROC	0x00000004
@@ -412,10 +414,22 @@ static ssize_t egalax_reset_store(struct device *dev, struct device_attribute *a
 	return count;
 }
 
+static ssize_t egalax_status_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int result = 0;
+
+	result = i2c_imx_get_status();
+
+	return sprintf(buf, "%d\n", result);
+}
+
 static DEVICE_ATTR(reset, S_IRUGO | S_IWUSR, NULL, egalax_reset_store);
+static DEVICE_ATTR(error, S_IRUGO, egalax_status_show, NULL);
+
 
 static struct attribute *egalax_attrs[] = {
 	&dev_attr_reset.attr,
+	&dev_attr_error.attr,
 	NULL
 };
 

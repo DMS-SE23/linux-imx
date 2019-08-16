@@ -122,6 +122,8 @@
 /** Variables ******************************************************************
 *******************************************************************************/
 
+int i2c_imx_xfer_result = 0;
+
 /*
  * sorted list of clock divider, register value pairs
  * taken from table 26-5, p.26-9, Freescale i.MX
@@ -912,6 +914,8 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 		}
 	}
 
+	i2c_imx_xfer_result = result;
+
 	if (result)
 		goto fail0;
 
@@ -971,6 +975,14 @@ fail0:
 			(result < 0) ? result : num);
 	return (result < 0) ? result : num;
 }
+
+int i2c_imx_get_status(void)
+{
+	pr_info("%s : %d\n", __func__, i2c_imx_xfer_result);
+
+	return i2c_imx_xfer_result;
+}
+EXPORT_SYMBOL(i2c_imx_get_status);
 
 static void i2c_imx_prepare_recovery(struct i2c_adapter *adap)
 {
